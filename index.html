@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pit Stop · Trilhas de Conhecimento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- fita de largada decorativa -->
+<div class="fita-largada" aria-hidden="true"></div>
+
+<!-- ============ TELA DE LOGIN ============ -->
+<main id="tela-login" class="tela-login">
+  <div class="painel-login">
+    <div class="painel-login__marca">
+      <span class="marca__numero">01</span>
+      <div class="marca__texto">
+        <p class="marca__eyebrow">Setor</p>
+        <h1 class="marca__titulo">PIT&nbsp;STOP</h1>
+        <p class="marca__sub">Trilhas de conhecimento</p>
+      </div>
+    </div>
+
+    <form id="form-login" class="form-login" autocomplete="off">
+      <label class="campo">
+        <span class="campo__rotulo">Usuário</span>
+        <input id="input-usuario" name="usuario" type="text" placeholder="ex: fabio" required autofocus />
+      </label>
+      <label class="campo">
+        <span class="campo__rotulo">Senha</span>
+        <input id="input-senha" name="senha" type="password" placeholder="••••••••" required />
+      </label>
+
+      <button type="submit" id="btn-entrar" class="botao botao--primario">
+        <span>Entrar no box</span>
+      </button>
+
+      <p id="login-erro" class="login-erro" role="alert" hidden></p>
+    </form>
+
+    <p class="painel-login__rodape">Softcom · nivelamento técnico do suporte</p>
+  </div>
+</main>
+
+<!-- ============ DASHBOARD ============ -->
+<main id="tela-dashboard" class="tela-dashboard" hidden>
+
+  <header class="cabecalho">
+    <div class="cabecalho__marca">
+      <span class="marca__numero marca__numero--sm">01</span>
+      <div>
+        <p class="marca__eyebrow">Setor</p>
+        <h1 class="marca__titulo marca__titulo--sm">PIT&nbsp;STOP</h1>
+      </div>
+    </div>
+
+    <div class="cabecalho__piloto">
+      <div class="piloto__info">
+        <p class="piloto__rotulo">Piloto</p>
+        <p id="piloto-nome" class="piloto__nome">—</p>
+      </div>
+      <button id="btn-sair" class="botao botao--fantasma">Sair</button>
+    </div>
+  </header>
+
+  <section class="painel-geral">
+    <div class="gauge" role="img" aria-label="Progresso geral">
+      <svg viewBox="0 0 140 140" class="gauge__svg">
+        <circle cx="70" cy="70" r="60" class="gauge__trilho" />
+        <circle cx="70" cy="70" r="60" class="gauge__valor" id="gauge-valor" />
+      </svg>
+      <div class="gauge__centro">
+        <span id="gauge-percentual" class="gauge__percentual">0%</span>
+        <span class="gauge__legenda">completo</span>
+      </div>
+    </div>
+
+    <div class="painel-geral__texto">
+      <p class="painel-geral__eyebrow">Volta geral</p>
+      <h2 class="painel-geral__titulo">Seu progresso na temporada</h2>
+      <p id="resumo-topicos" class="painel-geral__resumo">Carregando trilhas…</p>
+    </div>
+  </section>
+
+  <section id="lista-trilhas" class="lista-trilhas" aria-live="polite">
+    <!-- cards de trilha inseridos via JS -->
+  </section>
+
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
