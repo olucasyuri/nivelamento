@@ -5,8 +5,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // (Settings → API no painel do Supabase). A "anon key" é pública,
 // pode ficar no front-end; NUNCA coloque a service_role key aqui.
 // =========================================================
-const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
-const SUPABASE_ANON_KEY = 'SUA-ANON-KEY-AQUI';
+const SUPABASE_URL = 'https://kbibdhrcculvoxeymfwt.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiaWJkaHJjY3Vsdm94ZXltZnd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODgxODksImV4cCI6MjEwMTk2NDE4OX0.tAQRO4BvXoE_lwFgIZnDcycoJiO-eukc0D6NlQfqcp0';
 const DOMINIO_EMAIL = 'pitstop.local'; // precisa bater com o usado no seed_usuarios.js
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
