@@ -1,14 +1,9 @@
 {
-  "name": "pitstop-seed-usuarios",
+  "name": "pitstop-trilhas",
   "version": "1.0.0",
-  "type": "module",
   "private": true,
-  "description": "Script único, para rodar uma vez, que cria os logins iniciais dos colaboradores no Supabase.",
-  "scripts": {
-    "seed": "node seed_usuarios.js"
-  },
+  "description": "Front-end estático + função serverless (api/criar-usuario.js) do Pit Stop.",
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
-    "dotenv": "^16.4.5"
+    "@supabase/supabase-js": "^2.45.4"
   }
 }

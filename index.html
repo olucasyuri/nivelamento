@@ -64,9 +64,44 @@
         <p class="piloto__rotulo">Piloto</p>
         <p id="piloto-nome" class="piloto__nome">—</p>
       </div>
+      <button id="btn-admin" class="botao botao--fantasma" hidden>Painel Admin</button>
       <button id="btn-sair" class="botao botao--fantasma">Sair</button>
     </div>
   </header>
+
+  <!-- ============ PAINEL ADMIN (só aparece para is_admin = true) ============ -->
+  <section id="painel-admin" class="painel-admin" hidden>
+    <div class="painel-admin__bloco">
+      <p class="painel-geral__eyebrow">Administração</p>
+      <h2 class="painel-geral__titulo">Progresso de cada colaborador</h2>
+      <div id="tabela-admin" class="tabela-admin">
+        <p class="painel-geral__resumo">Carregando…</p>
+      </div>
+    </div>
+
+    <div class="painel-admin__bloco">
+      <p class="painel-geral__eyebrow">Cadastro</p>
+      <h2 class="painel-geral__titulo">Novo colaborador</h2>
+      <form id="form-novo-usuario" class="form-admin">
+        <label class="campo">
+          <span class="campo__rotulo">Nome</span>
+          <input id="admin-nome" type="text" placeholder="ex: Maria Fernanda" required />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Usuário (login)</span>
+          <input id="admin-usuario" type="text" placeholder="ex: maria.fernanda" required />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Senha (opcional — padrão qaz@123)</span>
+          <input id="admin-senha" type="text" placeholder="qaz@123" />
+        </label>
+        <button type="submit" id="btn-cadastrar" class="botao botao--primario">
+          <span>Cadastrar colaborador</span>
+        </button>
+        <p id="admin-feedback" class="login-erro" role="status" hidden></p>
+      </form>
+    </div>
+  </section>
 
   <section class="painel-geral">
     <div class="gauge" role="img" aria-label="Progresso geral">
