@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -43,7 +44,7 @@
       <p id="login-erro" class="login-erro" role="alert" hidden></p>
     </form>
 
-    <p class="painel-login__rodape">Softcom.</p>
+    <p class="painel-login__rodape">Softcom · nivelamento técnico do suporte</p>
   </div>
 </main>
 
@@ -71,6 +72,21 @@
 
   <!-- ============ PAINEL ADMIN (só aparece para is_admin = true) ============ -->
   <section id="painel-admin" class="painel-admin" hidden>
+
+    <div class="painel-admin__grade">
+      <div class="painel-admin__bloco">
+        <p class="painel-geral__eyebrow">Evolução</p>
+        <h2 class="painel-geral__titulo">Progresso da equipe ao longo do tempo</h2>
+        <div class="grafico-caixa"><canvas id="grafico-evolucao"></canvas></div>
+      </div>
+
+      <div class="painel-admin__bloco">
+        <p class="painel-geral__eyebrow">Por trilha</p>
+        <h2 class="painel-geral__titulo">Conclusão média por trilha</h2>
+        <div class="grafico-caixa"><canvas id="grafico-trilhas"></canvas></div>
+      </div>
+    </div>
+
     <div class="painel-admin__bloco">
       <p class="painel-geral__eyebrow">Administração</p>
       <h2 class="painel-geral__titulo">Progresso de cada colaborador</h2>
@@ -79,27 +95,68 @@
       </div>
     </div>
 
-    <div class="painel-admin__bloco">
-      <p class="painel-geral__eyebrow">Cadastro</p>
-      <h2 class="painel-geral__titulo">Novo colaborador</h2>
-      <form id="form-novo-usuario" class="form-admin">
-        <label class="campo">
-          <span class="campo__rotulo">Nome</span>
-          <input id="admin-nome" type="text" placeholder="ex: Maria Fernanda" required />
-        </label>
-        <label class="campo">
-          <span class="campo__rotulo">Usuário (login)</span>
-          <input id="admin-usuario" type="text" placeholder="ex: maria.fernanda" required />
-        </label>
-        <label class="campo">
-          <span class="campo__rotulo">Senha (opcional — padrão qaz@123)</span>
-          <input id="admin-senha" type="text" placeholder="qaz@123" />
-        </label>
-        <button type="submit" id="btn-cadastrar" class="botao botao--primario">
-          <span>Cadastrar colaborador</span>
-        </button>
-        <p id="admin-feedback" class="login-erro" role="status" hidden></p>
-      </form>
+    <div class="painel-admin__grade">
+      <div class="painel-admin__bloco">
+        <p class="painel-geral__eyebrow">Cadastro</p>
+        <h2 class="painel-geral__titulo">Novo colaborador</h2>
+        <form id="form-novo-usuario" class="form-admin">
+          <label class="campo">
+            <span class="campo__rotulo">Nome</span>
+            <input id="admin-nome" type="text" placeholder="ex: Maria Fernanda" required />
+          </label>
+          <label class="campo">
+            <span class="campo__rotulo">Usuário (login)</span>
+            <input id="admin-usuario" type="text" placeholder="ex: maria.fernanda" required />
+          </label>
+          <label class="campo">
+            <span class="campo__rotulo">Senha (opcional — padrão qaz@123)</span>
+            <input id="admin-senha" type="text" placeholder="qaz@123" />
+          </label>
+          <button type="submit" id="btn-cadastrar" class="botao botao--primario">
+            <span>Cadastrar colaborador</span>
+          </button>
+          <p id="admin-feedback" class="login-erro" role="status" hidden></p>
+        </form>
+      </div>
+
+      <div class="painel-admin__bloco">
+        <p class="painel-geral__eyebrow">Conteúdo</p>
+        <h2 class="painel-geral__titulo">Nova trilha (BOX)</h2>
+        <form id="form-nova-trilha" class="form-admin">
+          <label class="campo">
+            <span class="campo__rotulo">Título</span>
+            <input id="trilha-titulo" type="text" placeholder="ex: Meu Delivery" required />
+          </label>
+          <label class="campo">
+            <span class="campo__rotulo">Descrição</span>
+            <input id="trilha-descricao" type="text" placeholder="ex: Módulo de delivery integrado" />
+          </label>
+          <button type="submit" id="btn-nova-trilha" class="botao botao--primario">
+            <span>Criar trilha</span>
+          </button>
+          <p id="trilha-feedback" class="login-erro" role="status" hidden></p>
+        </form>
+
+        <h2 class="painel-geral__titulo painel-admin__subtitulo">Novo material em uma trilha</h2>
+        <form id="form-novo-topico" class="form-admin">
+          <label class="campo">
+            <span class="campo__rotulo">Trilha</span>
+            <select id="topico-trilha" class="campo__select" required></select>
+          </label>
+          <label class="campo">
+            <span class="campo__rotulo">Título do material</span>
+            <input id="topico-titulo" type="text" placeholder="ex: Cadastro de motoboys" required />
+          </label>
+          <label class="campo">
+            <span class="campo__rotulo">Link (opcional)</span>
+            <input id="topico-url" type="text" placeholder="https://..." />
+          </label>
+          <button type="submit" id="btn-novo-topico" class="botao botao--primario">
+            <span>Adicionar material</span>
+          </button>
+          <p id="topico-feedback" class="login-erro" role="status" hidden></p>
+        </form>
+      </div>
     </div>
   </section>
 

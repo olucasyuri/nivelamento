@@ -5,8 +5,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // (Settings → API no painel do Supabase). A "anon key" é pública,
 // pode ficar no front-end; NUNCA coloque a service_role key aqui.
 // =========================================================
-const SUPABASE_URL = 'https://kbibdhrcculvoxeymfwt.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiaWJkaHJjY3Vsdm94ZXltZnd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODgxODksImV4cCI6MjEwMTk2NDE4OX0.tAQRO4BvXoE_lwFgIZnDcycoJiO-eukc0D6NlQfqcp0';
+const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
+const SUPABASE_ANON_KEY = 'SUA-ANON-KEY-AQUI';
 const DOMINIO_EMAIL = 'pitstop.local'; // precisa bater com o usado no seed_usuarios.js
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -36,13 +36,32 @@ const adminSenha = document.getElementById('admin-senha');
 const btnCadastrar = document.getElementById('btn-cadastrar');
 const adminFeedback = document.getElementById('admin-feedback');
 
+const formNovaTrilha = document.getElementById('form-nova-trilha');
+const trilhaTitulo = document.getElementById('trilha-titulo');
+const trilhaDescricao = document.getElementById('trilha-descricao');
+const btnNovaTrilha = document.getElementById('btn-nova-trilha');
+const trilhaFeedback = document.getElementById('trilha-feedback');
+
+const formNovoTopico = document.getElementById('form-novo-topico');
+const topicoTrilhaSelect = document.getElementById('topico-trilha');
+const topicoTitulo = document.getElementById('topico-titulo');
+const topicoUrl = document.getElementById('topico-url');
+const btnNovoTopico = document.getElementById('btn-novo-topico');
+const topicoFeedback = document.getElementById('topico-feedback');
+
+const canvasEvolucao = document.getElementById('grafico-evolucao');
+const canvasTrilhas = document.getElementById('grafico-trilhas');
+
 const CIRCUNFERENCIA = 2 * Math.PI * 60; // r=60 no SVG do gauge
 
 // ---------- estado ----------
 let sessaoAtual = null;
 let progressoPorTopico = new Map(); // topico_id -> { id, concluido }
 let totalTopicosGlobal = 0;
+let trilhasGlobais = []; // lista completa de trilhas+tópicos, usada pelo painel admin
 let painelAdminCarregado = false;
+let graficoEvolucao = null;
+let graficoTrilhas = null;
 
 // =========================================================
 // LOGIN
@@ -141,9 +160,17 @@ async function iniciarDashboard() {
   trilhas.sort((a, b) => a.ordem - b.ordem);
 
   totalTopicosGlobal = trilhas.reduce((soma, t) => soma + t.topicos.length, 0);
+  trilhasGlobais = trilhas;
+  preencherSelectDeTrilhas(trilhas);
 
   renderizarTrilhas(trilhas);
   atualizarResumoGeral(trilhas);
+}
+
+function preencherSelectDeTrilhas(trilhas) {
+  topicoTrilhaSelect.innerHTML = trilhas
+    .map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.titulo)}</option>`)
+    .join('');
 }
 
 // =========================================================
@@ -160,11 +187,11 @@ async function carregarPainelAdmin() {
 
   const [{ data: perfis, error: erroPerfis }, { data: progressoTodos, error: erroProgresso }] = await Promise.all([
     supabase.from('perfis').select('id, nome, usuario, is_admin').order('nome', { ascending: true }),
-    supabase.from('progresso').select('usuario_id, concluido').eq('concluido', true),
+    supabase.from('progresso').select('usuario_id, topico_id, concluido, concluido_em').eq('concluido', true),
   ]);
 
   if (erroPerfis || erroProgresso) {
-    tabelaAdmin.innerHTML = '<p class="painel-geral__resumo">Não foi possível carregar os dados. Confira se a migração de admin (003_admin.sql) foi executada.</p>';
+    tabelaAdmin.innerHTML = '<p class="painel-geral__resumo">Não foi possível carregar os dados. Confira se as migrações 003 e 004 foram executadas.</p>';
     return;
   }
 
@@ -189,7 +216,140 @@ async function carregarPainelAdmin() {
     tabelaAdmin.appendChild(linha);
   });
 
+  const totalColaboradores = perfis.length;
+  renderizarGraficoEvolucao(progressoTodos ?? [], totalColaboradores);
+  renderizarGraficoTrilhas(progressoTodos ?? [], totalColaboradores);
+
   painelAdminCarregado = true;
+}
+
+function renderizarGraficoEvolucao(progressoConcluido, totalColaboradores) {
+  const totalPossivel = totalTopicosGlobal * totalColaboradores;
+
+  // agrupa por dia (yyyy-mm-dd) quantos materiais foram concluídos
+  const porDia = new Map();
+  progressoConcluido.forEach((p) => {
+    if (!p.concluido_em) return;
+    const dia = p.concluido_em.slice(0, 10);
+    porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+  });
+
+  const dias = [...porDia.keys()].sort();
+  let acumulado = 0;
+  const pontos = dias.map((dia) => {
+    acumulado += porDia.get(dia);
+    const percentual = totalPossivel > 0 ? Math.round((acumulado / totalPossivel) * 1000) / 10 : 0;
+    return { dia, percentual };
+  });
+
+  if (graficoEvolucao) graficoEvolucao.destroy();
+
+  if (pontos.length === 0) {
+    desenharGraficoVazio(canvasEvolucao, 'Ainda não há materiais concluídos para mostrar evolução.');
+    return;
+  }
+
+  graficoEvolucao = new Chart(canvasEvolucao, {
+    type: 'line',
+    data: {
+      labels: pontos.map((p) => formatarDataCurta(p.dia)),
+      datasets: [{
+        label: '% concluído pela equipe',
+        data: pontos.map((p) => p.percentual),
+        borderColor: '#e5482b',
+        backgroundColor: 'rgba(229, 72, 43, 0.15)',
+        tension: 0.3,
+        fill: true,
+        pointRadius: 3,
+        pointBackgroundColor: '#e5482b',
+      }],
+    },
+    options: optionsBaseGrafico('% concluído (acumulado)'),
+  });
+}
+
+function renderizarGraficoTrilhas(progressoConcluido, totalColaboradores) {
+  const topicoParaTrilha = new Map();
+  trilhasGlobais.forEach((t) => t.topicos.forEach((top) => topicoParaTrilha.set(top.id, t.id)));
+
+  const concluidosPorTrilha = new Map();
+  progressoConcluido.forEach((p) => {
+    const trilhaId = topicoParaTrilha.get(p.topico_id);
+    if (!trilhaId) return;
+    concluidosPorTrilha.set(trilhaId, (concluidosPorTrilha.get(trilhaId) ?? 0) + 1);
+  });
+
+  const dados = trilhasGlobais.map((t) => {
+    const possivel = t.topicos.length * totalColaboradores;
+    const concluidos = concluidosPorTrilha.get(t.id) ?? 0;
+    const percentual = possivel > 0 ? Math.round((concluidos / possivel) * 1000) / 10 : 0;
+    return { titulo: t.titulo, percentual };
+  });
+
+  if (graficoTrilhas) graficoTrilhas.destroy();
+
+  if (dados.length === 0) {
+    desenharGraficoVazio(canvasTrilhas, 'Nenhuma trilha cadastrada ainda.');
+    return;
+  }
+
+  graficoTrilhas = new Chart(canvasTrilhas, {
+    type: 'bar',
+    data: {
+      labels: dados.map((d) => d.titulo),
+      datasets: [{
+        label: '% médio concluído',
+        data: dados.map((d) => d.percentual),
+        backgroundColor: '#e5482b',
+        borderRadius: 4,
+        maxBarThickness: 28,
+      }],
+    },
+    options: optionsBaseGrafico('% concluído (média da equipe)'),
+  });
+}
+
+function optionsBaseGrafico(rotuloEixoY) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: { color: '#8b919b', callback: (v) => `${v}%` },
+        grid: { color: '#2a2e37' },
+        title: { display: true, text: rotuloEixoY, color: '#8b919b' },
+      },
+      x: {
+        ticks: { color: '#8b919b', autoSkip: true, maxRotation: 40, minRotation: 0 },
+        grid: { display: false },
+      },
+    },
+  };
+}
+
+function desenharGraficoVazio(canvas, mensagem) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#8b919b';
+  ctx.font = '13px Inter, sans-serif';
+  ctx.fillText(mensagem, 10, 30);
+}
+
+function formatarDataCurta(isoData) {
+  const [ano, mes, dia] = isoData.split('-');
+  return `${dia}/${mes}`;
+}
+
+function slugify(texto) {
+  return texto
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 formNovoUsuario.addEventListener('submit', async (evento) => {
@@ -233,6 +393,88 @@ formNovoUsuario.addEventListener('submit', async (evento) => {
     btnCadastrar.disabled = false;
     btnCadastrar.querySelector('span').textContent = 'Cadastrar colaborador';
   }
+});
+
+formNovaTrilha.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  trilhaFeedback.hidden = true;
+
+  const titulo = trilhaTitulo.value.trim();
+  const descricao = trilhaDescricao.value.trim();
+  if (!titulo) return;
+
+  const id = slugify(titulo);
+  const ordem = trilhasGlobais.length + 1;
+
+  btnNovaTrilha.disabled = true;
+  btnNovaTrilha.querySelector('span').textContent = 'Criando…';
+
+  const { error } = await supabase.from('trilhas').insert({ id, titulo, descricao: descricao || null, ordem });
+
+  btnNovaTrilha.disabled = false;
+  btnNovaTrilha.querySelector('span').textContent = 'Criar trilha';
+
+  if (error) {
+    trilhaFeedback.style.color = '';
+    trilhaFeedback.textContent = error.code === '23505'
+      ? 'Já existe uma trilha com um título muito parecido. Tente um título diferente.'
+      : (error.message ?? 'Erro ao criar trilha.');
+    trilhaFeedback.hidden = false;
+    return;
+  }
+
+  trilhaFeedback.style.color = 'var(--verde)';
+  trilhaFeedback.textContent = `Trilha "${titulo}" criada!`;
+  trilhaFeedback.hidden = false;
+  formNovaTrilha.reset();
+
+  await iniciarDashboard();
+  painelAdmin.hidden = false;
+  painelAdminCarregado = false;
+  await carregarPainelAdmin();
+});
+
+formNovoTopico.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  topicoFeedback.hidden = true;
+
+  const trilhaId = topicoTrilhaSelect.value;
+  const titulo = topicoTitulo.value.trim();
+  const url = topicoUrl.value.trim();
+  if (!trilhaId || !titulo) return;
+
+  const trilha = trilhasGlobais.find((t) => t.id === trilhaId);
+  const ordem = (trilha?.topicos.length ?? 0) + 1;
+
+  btnNovoTopico.disabled = true;
+  btnNovoTopico.querySelector('span').textContent = 'Adicionando…';
+
+  const { error } = await supabase.from('topicos').insert({
+    trilha_id: trilhaId,
+    titulo,
+    url: url || null,
+    ordem,
+  });
+
+  btnNovoTopico.disabled = false;
+  btnNovoTopico.querySelector('span').textContent = 'Adicionar material';
+
+  if (error) {
+    topicoFeedback.style.color = '';
+    topicoFeedback.textContent = error.message ?? 'Erro ao adicionar material.';
+    topicoFeedback.hidden = false;
+    return;
+  }
+
+  topicoFeedback.style.color = 'var(--verde)';
+  topicoFeedback.textContent = `Material "${titulo}" adicionado!`;
+  topicoFeedback.hidden = false;
+  formNovoTopico.reset();
+
+  await iniciarDashboard();
+  painelAdmin.hidden = false;
+  painelAdminCarregado = false;
+  await carregarPainelAdmin();
 });
 
 function renderizarTrilhas(trilhas) {
