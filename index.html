@@ -65,10 +65,36 @@
         <p class="piloto__rotulo">Piloto</p>
         <p id="piloto-nome" class="piloto__nome">—</p>
       </div>
+      <button id="btn-trocar-senha" class="botao botao--fantasma">Trocar senha</button>
       <button id="btn-admin" class="botao botao--fantasma" hidden>Painel Admin</button>
       <button id="btn-sair" class="botao botao--fantasma">Sair</button>
     </div>
   </header>
+
+  <!-- ============ MODAL: TROCAR SENHA ============ -->
+  <div id="modal-senha" class="modal" hidden>
+    <div class="modal__fundo" id="modal-senha-fundo"></div>
+    <div class="modal__caixa">
+      <h2 class="painel-geral__titulo">Trocar senha</h2>
+      <p class="painel-geral__resumo">Escolha uma nova senha para o seu login.</p>
+
+      <form id="form-trocar-senha" class="form-admin">
+        <label class="campo">
+          <span class="campo__rotulo">Nova senha</span>
+          <input id="nova-senha" type="password" placeholder="mínimo 6 caracteres" required minlength="6" />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Confirmar nova senha</span>
+          <input id="confirmar-senha" type="password" placeholder="repita a nova senha" required minlength="6" />
+        </label>
+        <div class="modal__acoes">
+          <button type="button" id="btn-cancelar-senha" class="botao botao--fantasma">Cancelar</button>
+          <button type="submit" id="btn-salvar-senha" class="botao botao--primario"><span>Salvar nova senha</span></button>
+        </div>
+        <p id="senha-feedback" class="login-erro" role="status" hidden></p>
+      </form>
+    </div>
+  </div>
 
   <!-- ============ PAINEL ADMIN (só aparece para is_admin = true) ============ -->
   <section id="painel-admin" class="painel-admin" hidden>

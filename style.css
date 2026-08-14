@@ -248,6 +248,34 @@ input { font-family: inherit; }
 .painel-geral__titulo { font-size: 20px; margin: 4px 0 6px; }
 .painel-geral__resumo { margin: 0; font-size: 13px; color: var(--texto-mudo); }
 
+/* ---------------- MODAL ---------------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+.modal__fundo {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 13, 0.72);
+}
+.modal__caixa {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 26px 26px 22px;
+  box-shadow: 0 30px 60px -30px rgba(0,0,0,0.7);
+}
+.modal__acoes { display: flex; gap: 10px; margin-top: 4px; }
+.modal__acoes .botao { flex: 1; }
+
 /* ---------------- PAINEL ADMIN ---------------- */
 .painel-admin { display: flex; flex-direction: column; gap: 20px; margin-bottom: 32px; }
 .painel-admin__grade {

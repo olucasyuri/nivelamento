@@ -53,6 +53,16 @@ const canvasEvolucao = document.getElementById('grafico-evolucao');
 const canvasTrilhas = document.getElementById('grafico-trilhas');
 const visaoColaborador = document.getElementById('visao-colaborador');
 
+const btnTrocarSenha = document.getElementById('btn-trocar-senha');
+const modalSenha = document.getElementById('modal-senha');
+const modalSenhaFundo = document.getElementById('modal-senha-fundo');
+const formTrocarSenha = document.getElementById('form-trocar-senha');
+const novaSenhaInput = document.getElementById('nova-senha');
+const confirmarSenhaInput = document.getElementById('confirmar-senha');
+const btnCancelarSenha = document.getElementById('btn-cancelar-senha');
+const btnSalvarSenha = document.getElementById('btn-salvar-senha');
+const senhaFeedback = document.getElementById('senha-feedback');
+
 const CIRCUNFERENCIA = 2 * Math.PI * 60; // r=60 no SVG do gauge
 
 // ---------- estado ----------
@@ -104,6 +114,65 @@ function definirCarregando(carregando) {
 }
 function mostrarErro(msg) { loginErro.textContent = msg; loginErro.hidden = false; }
 function esconderErro() { loginErro.hidden = true; }
+
+// =========================================================
+// TROCAR SENHA
+// =========================================================
+btnTrocarSenha.addEventListener('click', () => abrirModalSenha());
+btnCancelarSenha.addEventListener('click', () => fecharModalSenha());
+modalSenhaFundo.addEventListener('click', () => fecharModalSenha());
+
+function abrirModalSenha() {
+  formTrocarSenha.reset();
+  senhaFeedback.hidden = true;
+  modalSenha.hidden = false;
+  novaSenhaInput.focus();
+}
+
+function fecharModalSenha() {
+  modalSenha.hidden = true;
+}
+
+formTrocarSenha.addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  senhaFeedback.hidden = true;
+
+  const novaSenha = novaSenhaInput.value;
+  const confirmarSenha = confirmarSenhaInput.value;
+
+  if (novaSenha.length < 6) {
+    senhaFeedback.style.color = '';
+    senhaFeedback.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
+    senhaFeedback.hidden = false;
+    return;
+  }
+  if (novaSenha !== confirmarSenha) {
+    senhaFeedback.style.color = '';
+    senhaFeedback.textContent = 'As senhas não coincidem. Confira e tente de novo.';
+    senhaFeedback.hidden = false;
+    return;
+  }
+
+  btnSalvarSenha.disabled = true;
+  btnSalvarSenha.querySelector('span').textContent = 'Salvando…';
+
+  const { error } = await supabase.auth.updateUser({ password: novaSenha });
+
+  btnSalvarSenha.disabled = false;
+  btnSalvarSenha.querySelector('span').textContent = 'Salvar nova senha';
+
+  if (error) {
+    senhaFeedback.style.color = '';
+    senhaFeedback.textContent = error.message ?? 'Não foi possível trocar a senha. Tente novamente.';
+    senhaFeedback.hidden = false;
+    return;
+  }
+
+  senhaFeedback.style.color = 'var(--verde)';
+  senhaFeedback.textContent = 'Senha alterada com sucesso!';
+  senhaFeedback.hidden = false;
+  setTimeout(fecharModalSenha, 1500);
+});
 
 // tenta restaurar sessão já existente (ex: recarregou a página)
 async function verificarSessaoExistente() {
