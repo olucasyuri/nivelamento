@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -160,28 +160,30 @@
     </div>
   </section>
 
-  <section class="painel-geral">
-    <div class="gauge" role="img" aria-label="Progresso geral">
-      <svg viewBox="0 0 140 140" class="gauge__svg">
-        <circle cx="70" cy="70" r="60" class="gauge__trilho" />
-        <circle cx="70" cy="70" r="60" class="gauge__valor" id="gauge-valor" />
-      </svg>
-      <div class="gauge__centro">
-        <span id="gauge-percentual" class="gauge__percentual">0%</span>
-        <span class="gauge__legenda">completo</span>
+  <div id="visao-colaborador">
+    <section class="painel-geral">
+      <div class="gauge" role="img" aria-label="Progresso geral">
+        <svg viewBox="0 0 140 140" class="gauge__svg">
+          <circle cx="70" cy="70" r="60" class="gauge__trilho" />
+          <circle cx="70" cy="70" r="60" class="gauge__valor" id="gauge-valor" />
+        </svg>
+        <div class="gauge__centro">
+          <span id="gauge-percentual" class="gauge__percentual">0%</span>
+          <span class="gauge__legenda">completo</span>
+        </div>
       </div>
-    </div>
 
-    <div class="painel-geral__texto">
-      <p class="painel-geral__eyebrow">Volta geral</p>
-      <h2 class="painel-geral__titulo">Seu progresso na temporada</h2>
-      <p id="resumo-topicos" class="painel-geral__resumo">Carregando trilhas…</p>
-    </div>
-  </section>
+      <div class="painel-geral__texto">
+        <p class="painel-geral__eyebrow">Volta geral</p>
+        <h2 class="painel-geral__titulo">Seu progresso na temporada</h2>
+        <p id="resumo-topicos" class="painel-geral__resumo">Carregando trilhas…</p>
+      </div>
+    </section>
 
-  <section id="lista-trilhas" class="lista-trilhas" aria-live="polite">
-    <!-- cards de trilha inseridos via JS -->
-  </section>
+    <section id="lista-trilhas" class="lista-trilhas" aria-live="polite">
+      <!-- cards de trilha inseridos via JS -->
+    </section>
+  </div>
 
 </main>
 

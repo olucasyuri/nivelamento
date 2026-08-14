@@ -5,8 +5,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // (Settings → API no painel do Supabase). A "anon key" é pública,
 // pode ficar no front-end; NUNCA coloque a service_role key aqui.
 // =========================================================
-const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
-const SUPABASE_ANON_KEY = 'SUA-ANON-KEY-AQUI';
+const SUPABASE_URL = 'https://kbibdhrcculvoxeymfwt.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiaWJkaHJjY3Vsdm94ZXltZnd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODgxODksImV4cCI6MjEwMTk2NDE4OX0.tAQRO4BvXoE_lwFgIZnDcycoJiO-eukc0D6NlQfqcp0';
 const DOMINIO_EMAIL = 'pitstop.local'; // precisa bater com o usado no seed_usuarios.js
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -51,6 +51,7 @@ const topicoFeedback = document.getElementById('topico-feedback');
 
 const canvasEvolucao = document.getElementById('grafico-evolucao');
 const canvasTrilhas = document.getElementById('grafico-trilhas');
+const visaoColaborador = document.getElementById('visao-colaborador');
 
 const CIRCUNFERENCIA = 2 * Math.PI * 60; // r=60 no SVG do gauge
 
@@ -132,9 +133,11 @@ async function iniciarDashboard() {
 
   if (perfil?.is_admin) {
     btnAdmin.hidden = false;
+    btnAdmin.textContent = painelAdmin.hidden ? 'Painel Admin' : 'Minhas trilhas';
   } else {
     btnAdmin.hidden = true;
     painelAdmin.hidden = true;
+    visaoColaborador.hidden = false;
   }
 
   const [{ data: trilhas, error: erroTrilhas }, { data: progresso, error: erroProgresso }] = await Promise.all([
@@ -177,9 +180,11 @@ function preencherSelectDeTrilhas(trilhas) {
 // PAINEL ADMIN
 // =========================================================
 btnAdmin.addEventListener('click', () => {
-  const abrir = painelAdmin.hidden;
-  painelAdmin.hidden = !abrir;
-  if (abrir && !painelAdminCarregado) carregarPainelAdmin();
+  const abrirAdmin = painelAdmin.hidden; // true = está fechado, vai abrir agora
+  painelAdmin.hidden = !abrirAdmin;
+  visaoColaborador.hidden = abrirAdmin;
+  btnAdmin.textContent = abrirAdmin ? 'Minhas trilhas' : 'Painel Admin';
+  if (abrirAdmin && !painelAdminCarregado) carregarPainelAdmin();
 });
 
 async function carregarPainelAdmin() {
@@ -430,6 +435,8 @@ formNovaTrilha.addEventListener('submit', async (evento) => {
 
   await iniciarDashboard();
   painelAdmin.hidden = false;
+  visaoColaborador.hidden = true;
+  btnAdmin.textContent = 'Minhas trilhas';
   painelAdminCarregado = false;
   await carregarPainelAdmin();
 });
@@ -473,6 +480,8 @@ formNovoTopico.addEventListener('submit', async (evento) => {
 
   await iniciarDashboard();
   painelAdmin.hidden = false;
+  visaoColaborador.hidden = true;
+  btnAdmin.textContent = 'Minhas trilhas';
   painelAdminCarregado = false;
   await carregarPainelAdmin();
 });
