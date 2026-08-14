@@ -96,8 +96,56 @@
     </div>
   </div>
 
+  <!-- ============ MODAL: DETALHE DO COLABORADOR ============ -->
+  <div id="modal-colaborador" class="modal" hidden>
+    <div class="modal__fundo" id="modal-colaborador-fundo"></div>
+    <div class="modal__caixa modal__caixa--larga">
+      <div class="modal-colaborador__cabecalho">
+        <div>
+          <h2 id="colab-nome" class="painel-geral__titulo">—</h2>
+          <p id="colab-usuario" class="painel-geral__resumo">—</p>
+        </div>
+        <div class="modal-colaborador__badges" id="colab-badges"></div>
+      </div>
+
+      <div class="modal-colaborador__acoes">
+        <button type="button" id="btn-colab-resetar-senha" class="botao botao--fantasma">Resetar senha</button>
+        <button type="button" id="btn-colab-alternar-acesso" class="botao botao--fantasma">Desativar acesso</button>
+        <button type="button" id="btn-colab-alternar-admin" class="botao botao--fantasma">Tornar admin</button>
+      </div>
+      <p id="colab-acoes-feedback" class="login-erro" role="status" hidden></p>
+
+      <div class="modal-colaborador__checklist" id="colab-checklist">
+        <p class="painel-geral__resumo">Carregando…</p>
+      </div>
+
+      <div class="modal__acoes">
+        <button type="button" id="btn-fechar-colaborador" class="botao botao--fantasma">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ PAINEL ADMIN (só aparece para is_admin = true) ============ -->
   <section id="painel-admin" class="painel-admin" hidden>
+
+    <div class="kpis" id="kpis-admin">
+      <div class="kpi-card">
+        <p class="kpi-card__rotulo">Progresso médio da equipe</p>
+        <p id="kpi-media" class="kpi-card__valor">—</p>
+      </div>
+      <div class="kpi-card">
+        <p class="kpi-card__rotulo">Destaque da temporada</p>
+        <p id="kpi-destaque" class="kpi-card__valor kpi-card__valor--pequeno">—</p>
+      </div>
+      <div class="kpi-card">
+        <p class="kpi-card__rotulo">Trilha mais atrasada</p>
+        <p id="kpi-atrasada" class="kpi-card__valor kpi-card__valor--pequeno">—</p>
+      </div>
+      <div class="kpi-card">
+        <p class="kpi-card__rotulo">Concluídos nos últimos 7 dias</p>
+        <p id="kpi-semana" class="kpi-card__valor">—</p>
+      </div>
+    </div>
 
     <div class="painel-admin__grade">
       <div class="painel-admin__bloco">
@@ -114,75 +162,95 @@
     </div>
 
     <div class="painel-admin__bloco">
-      <p class="painel-geral__eyebrow">Administração</p>
-      <h2 class="painel-geral__titulo">Progresso de cada colaborador</h2>
+      <div class="tabela-admin__cabecalho">
+        <div>
+          <p class="painel-geral__eyebrow">Administração</p>
+          <h2 class="painel-geral__titulo">Progresso de cada colaborador</h2>
+        </div>
+        <div class="tabela-admin__controles">
+          <input id="filtro-colaborador" class="campo__select" type="text" placeholder="Buscar por nome ou usuário…" />
+          <select id="ordenar-colaborador" class="campo__select">
+            <option value="nome">Ordenar: nome (A-Z)</option>
+            <option value="progresso-desc">Ordenar: maior progresso</option>
+            <option value="progresso-asc">Ordenar: menor progresso</option>
+          </select>
+        </div>
+      </div>
+      <p id="colaboradores-feedback" class="login-erro" role="status" hidden></p>
       <div id="tabela-admin" class="tabela-admin">
         <p class="painel-geral__resumo">Carregando…</p>
       </div>
     </div>
 
-    <div class="painel-admin__grade">
-      <div class="painel-admin__bloco">
-        <p class="painel-geral__eyebrow">Cadastro</p>
-        <h2 class="painel-geral__titulo">Novo colaborador</h2>
-        <form id="form-novo-usuario" class="form-admin">
-          <label class="campo">
-            <span class="campo__rotulo">Nome</span>
-            <input id="admin-nome" type="text" placeholder="ex: Maria Fernanda" required />
-          </label>
-          <label class="campo">
-            <span class="campo__rotulo">Usuário (login)</span>
-            <input id="admin-usuario" type="text" placeholder="ex: maria.fernanda" required />
-          </label>
-          <label class="campo">
-            <span class="campo__rotulo">Senha (opcional — padrão qaz@123)</span>
-            <input id="admin-senha" type="text" placeholder="qaz@123" />
-          </label>
-          <button type="submit" id="btn-cadastrar" class="botao botao--primario">
-            <span>Cadastrar colaborador</span>
-          </button>
-          <p id="admin-feedback" class="login-erro" role="status" hidden></p>
-        </form>
+    <div class="painel-admin__bloco">
+      <p class="painel-geral__eyebrow">Cadastro</p>
+      <h2 class="painel-geral__titulo">Novo colaborador</h2>
+      <form id="form-novo-usuario" class="form-admin">
+        <label class="campo">
+          <span class="campo__rotulo">Nome</span>
+          <input id="admin-nome" type="text" placeholder="ex: Maria Fernanda" required />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Usuário (login)</span>
+          <input id="admin-usuario" type="text" placeholder="ex: maria.fernanda" required />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Senha (opcional — padrão qaz@123)</span>
+          <input id="admin-senha" type="text" placeholder="qaz@123" />
+        </label>
+        <button type="submit" id="btn-cadastrar" class="botao botao--primario">
+          <span>Cadastrar colaborador</span>
+        </button>
+        <p id="admin-feedback" class="login-erro" role="status" hidden></p>
+      </form>
+    </div>
+
+    <div class="painel-admin__bloco">
+      <p class="painel-geral__eyebrow">Conteúdo</p>
+      <h2 class="painel-geral__titulo">Gerenciar trilhas e materiais</h2>
+      <div id="gerenciar-trilhas" class="gerenciar-trilhas">
+        <p class="painel-geral__resumo">Carregando…</p>
       </div>
 
-      <div class="painel-admin__bloco">
-        <p class="painel-geral__eyebrow">Conteúdo</p>
-        <h2 class="painel-geral__titulo">Nova trilha (BOX)</h2>
-        <form id="form-nova-trilha" class="form-admin">
-          <label class="campo">
-            <span class="campo__rotulo">Título</span>
-            <input id="trilha-titulo" type="text" placeholder="ex: Meu Delivery" required />
-          </label>
-          <label class="campo">
-            <span class="campo__rotulo">Descrição</span>
-            <input id="trilha-descricao" type="text" placeholder="ex: Módulo de delivery integrado" />
-          </label>
-          <button type="submit" id="btn-nova-trilha" class="botao botao--primario">
-            <span>Criar trilha</span>
-          </button>
-          <p id="trilha-feedback" class="login-erro" role="status" hidden></p>
-        </form>
+      <h2 class="painel-geral__titulo painel-admin__subtitulo">Nova trilha (BOX)</h2>
+      <form id="form-nova-trilha" class="form-admin">
+        <label class="campo">
+          <span class="campo__rotulo">Título</span>
+          <input id="trilha-titulo" type="text" placeholder="ex: Meu Delivery" required />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Descrição</span>
+          <input id="trilha-descricao" type="text" placeholder="ex: Módulo de delivery integrado" />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Prazo (opcional)</span>
+          <input id="trilha-prazo" type="date" />
+        </label>
+        <button type="submit" id="btn-nova-trilha" class="botao botao--primario">
+          <span>Criar trilha</span>
+        </button>
+        <p id="trilha-feedback" class="login-erro" role="status" hidden></p>
+      </form>
 
-        <h2 class="painel-geral__titulo painel-admin__subtitulo">Novo material em uma trilha</h2>
-        <form id="form-novo-topico" class="form-admin">
-          <label class="campo">
-            <span class="campo__rotulo">Trilha</span>
-            <select id="topico-trilha" class="campo__select" required></select>
-          </label>
-          <label class="campo">
-            <span class="campo__rotulo">Título do material</span>
-            <input id="topico-titulo" type="text" placeholder="ex: Cadastro de motoboys" required />
-          </label>
-          <label class="campo">
-            <span class="campo__rotulo">Link (opcional)</span>
-            <input id="topico-url" type="text" placeholder="https://..." />
-          </label>
-          <button type="submit" id="btn-novo-topico" class="botao botao--primario">
-            <span>Adicionar material</span>
-          </button>
-          <p id="topico-feedback" class="login-erro" role="status" hidden></p>
-        </form>
-      </div>
+      <h2 class="painel-geral__titulo painel-admin__subtitulo">Novo material em uma trilha</h2>
+      <form id="form-novo-topico" class="form-admin">
+        <label class="campo">
+          <span class="campo__rotulo">Trilha</span>
+          <select id="topico-trilha" class="campo__select" required></select>
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Título do material</span>
+          <input id="topico-titulo" type="text" placeholder="ex: Cadastro de motoboys" required />
+        </label>
+        <label class="campo">
+          <span class="campo__rotulo">Link (opcional)</span>
+          <input id="topico-url" type="text" placeholder="https://..." />
+        </label>
+        <button type="submit" id="btn-novo-topico" class="botao botao--primario">
+          <span>Adicionar material</span>
+        </button>
+        <p id="topico-feedback" class="login-erro" role="status" hidden></p>
+      </form>
     </div>
   </section>
 

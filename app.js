@@ -53,6 +53,30 @@ const canvasEvolucao = document.getElementById('grafico-evolucao');
 const canvasTrilhas = document.getElementById('grafico-trilhas');
 const visaoColaborador = document.getElementById('visao-colaborador');
 
+const kpiMedia = document.getElementById('kpi-media');
+const kpiDestaque = document.getElementById('kpi-destaque');
+const kpiAtrasada = document.getElementById('kpi-atrasada');
+const kpiSemana = document.getElementById('kpi-semana');
+
+const filtroColaborador = document.getElementById('filtro-colaborador');
+const ordenarColaborador = document.getElementById('ordenar-colaborador');
+const colaboradoresFeedback = document.getElementById('colaboradores-feedback');
+
+const trilhaPrazo = document.getElementById('trilha-prazo');
+const gerenciarTrilhasEl = document.getElementById('gerenciar-trilhas');
+
+const modalColaborador = document.getElementById('modal-colaborador');
+const modalColaboradorFundo = document.getElementById('modal-colaborador-fundo');
+const colabNome = document.getElementById('colab-nome');
+const colabUsuario = document.getElementById('colab-usuario');
+const colabBadges = document.getElementById('colab-badges');
+const colabChecklist = document.getElementById('colab-checklist');
+const btnColabResetarSenha = document.getElementById('btn-colab-resetar-senha');
+const btnColabAlternarAcesso = document.getElementById('btn-colab-alternar-acesso');
+const btnColabAlternarAdmin = document.getElementById('btn-colab-alternar-admin');
+const colabAcoesFeedback = document.getElementById('colab-acoes-feedback');
+const btnFecharColaborador = document.getElementById('btn-fechar-colaborador');
+
 const btnTrocarSenha = document.getElementById('btn-trocar-senha');
 const modalSenha = document.getElementById('modal-senha');
 const modalSenhaFundo = document.getElementById('modal-senha-fundo');
@@ -73,6 +97,9 @@ let trilhasGlobais = []; // lista completa de trilhas+tópicos, usada pelo paine
 let painelAdminCarregado = false;
 let graficoEvolucao = null;
 let graficoTrilhas = null;
+let adminPerfisCache = [];
+let adminProgressoCache = [];
+let colaboradorAberto = null;
 
 // =========================================================
 // LOGIN
@@ -212,7 +239,7 @@ async function iniciarDashboard() {
   const [{ data: trilhas, error: erroTrilhas }, { data: progresso, error: erroProgresso }] = await Promise.all([
     supabase
       .from('trilhas')
-      .select('id, titulo, descricao, ordem, topicos(id, titulo, url, ordem)')
+      .select('id, titulo, descricao, prazo, ordem, topicos(id, titulo, url, ordem)')
       .order('ordem', { ascending: true }),
     supabase
       .from('progresso')
@@ -258,44 +285,285 @@ btnAdmin.addEventListener('click', () => {
 
 async function carregarPainelAdmin() {
   tabelaAdmin.innerHTML = '<p class="painel-geral__resumo">Carregando…</p>';
+  colaboradoresFeedback.hidden = true;
 
   const [{ data: perfis, error: erroPerfis }, { data: progressoTodos, error: erroProgresso }] = await Promise.all([
-    supabase.from('perfis').select('id, nome, usuario, is_admin').order('nome', { ascending: true }),
+    supabase.from('perfis').select('id, nome, usuario, is_admin, ativo').order('nome', { ascending: true }),
     supabase.from('progresso').select('usuario_id, topico_id, concluido, concluido_em').eq('concluido', true),
   ]);
 
   if (erroPerfis || erroProgresso) {
-    tabelaAdmin.innerHTML = '<p class="painel-geral__resumo">Não foi possível carregar os dados. Confira se as migrações 003 e 004 foram executadas.</p>';
+    tabelaAdmin.innerHTML = '';
+    colaboradoresFeedback.textContent = 'Não foi possível carregar os dados. Confira se as migrações 003, 004 e 006 foram executadas.';
+    colaboradoresFeedback.hidden = false;
     return;
   }
 
-  const concluidosPorUsuario = new Map();
-  (progressoTodos ?? []).forEach((p) => {
-    concluidosPorUsuario.set(p.usuario_id, (concluidosPorUsuario.get(p.usuario_id) ?? 0) + 1);
-  });
+  adminPerfisCache = perfis ?? [];
+  adminProgressoCache = progressoTodos ?? [];
 
-  tabelaAdmin.innerHTML = '';
-  perfis.forEach((p) => {
-    const concluidos = concluidosPorUsuario.get(p.id) ?? 0;
-    const percentual = totalTopicosGlobal > 0 ? Math.round((concluidos / totalTopicosGlobal) * 100) : 0;
+  renderizarKpis();
+  renderizarTabelaAdmin();
+  renderizarGerenciarTrilhas();
 
-    const linha = document.createElement('div');
-    linha.className = 'linha-admin';
-    linha.innerHTML = `
-      <span class="linha-admin__nome">${escapeHtml(p.nome)} <span class="linha-admin__usuario">@${escapeHtml(p.usuario)}</span></span>
-      ${p.is_admin ? '<span class="linha-admin__badge-admin">admin</span>' : ''}
-      <span class="linha-admin__barra"><span class="linha-admin__barra-preenchimento" style="width:${percentual}%"></span></span>
-      <span class="linha-admin__percentual">${concluidos}/${totalTopicosGlobal} · ${percentual}%</span>
-    `;
-    tabelaAdmin.appendChild(linha);
-  });
-
-  const totalColaboradores = perfis.length;
-  renderizarGraficoEvolucao(progressoTodos ?? [], totalColaboradores);
-  renderizarGraficoTrilhas(progressoTodos ?? [], totalColaboradores);
+  const totalColaboradores = adminPerfisCache.length;
+  renderizarGraficoEvolucao(adminProgressoCache, totalColaboradores);
+  renderizarGraficoTrilhas(adminProgressoCache, totalColaboradores);
 
   painelAdminCarregado = true;
 }
+
+// ---------- estatísticas por colaborador (reutilizadas pela tabela, KPIs e modal) ----------
+function calcularEstatisticasColaboradores() {
+  const concluidosPorUsuario = new Map(); // usuario_id -> count
+  const ultimaAtividadePorUsuario = new Map(); // usuario_id -> data mais recente (string ISO)
+
+  adminProgressoCache.forEach((p) => {
+    concluidosPorUsuario.set(p.usuario_id, (concluidosPorUsuario.get(p.usuario_id) ?? 0) + 1);
+    if (p.concluido_em) {
+      const atual = ultimaAtividadePorUsuario.get(p.usuario_id);
+      if (!atual || p.concluido_em > atual) ultimaAtividadePorUsuario.set(p.usuario_id, p.concluido_em);
+    }
+  });
+
+  const seteDiasAtrasMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  return adminPerfisCache.map((p) => {
+    const concluidos = concluidosPorUsuario.get(p.id) ?? 0;
+    const percentual = totalTopicosGlobal > 0 ? Math.round((concluidos / totalTopicosGlobal) * 100) : 0;
+    const ultimaAtividade = ultimaAtividadePorUsuario.get(p.id) ?? null;
+    const ultimaAtividadeMs = ultimaAtividade ? new Date(ultimaAtividade).getTime() : null;
+    const parado = percentual < 100 && (ultimaAtividadeMs === null || ultimaAtividadeMs < seteDiasAtrasMs);
+    const diasParado = ultimaAtividadeMs
+      ? Math.floor((Date.now() - ultimaAtividadeMs) / (24 * 60 * 60 * 1000))
+      : null;
+
+    return { ...p, concluidos, percentual, ultimaAtividade, parado, diasParado };
+  });
+}
+
+function renderizarKpis() {
+  const estatisticas = calcularEstatisticasColaboradores();
+
+  const media = estatisticas.length > 0
+    ? Math.round(estatisticas.reduce((soma, e) => soma + e.percentual, 0) / estatisticas.length)
+    : 0;
+  kpiMedia.textContent = `${media}%`;
+
+  const destaque = [...estatisticas].sort((a, b) => b.percentual - a.percentual)[0];
+  kpiDestaque.textContent = destaque ? `${destaque.nome} · ${destaque.percentual}%` : '—';
+
+  const totalColaboradores = adminPerfisCache.length;
+  const topicoParaTrilha = new Map();
+  trilhasGlobais.forEach((t) => t.topicos.forEach((top) => topicoParaTrilha.set(top.id, t.id)));
+  const concluidosPorTrilha = new Map();
+  adminProgressoCache.forEach((p) => {
+    const trilhaId = topicoParaTrilha.get(p.topico_id);
+    if (!trilhaId) return;
+    concluidosPorTrilha.set(trilhaId, (concluidosPorTrilha.get(trilhaId) ?? 0) + 1);
+  });
+  const trilhasComPercentual = trilhasGlobais
+    .filter((t) => t.topicos.length > 0)
+    .map((t) => {
+      const possivel = t.topicos.length * totalColaboradores;
+      const concluidos = concluidosPorTrilha.get(t.id) ?? 0;
+      return { titulo: t.titulo, percentual: possivel > 0 ? Math.round((concluidos / possivel) * 100) : 0 };
+    })
+    .sort((a, b) => a.percentual - b.percentual);
+  kpiAtrasada.textContent = trilhasComPercentual[0] ? `${trilhasComPercentual[0].titulo} · ${trilhasComPercentual[0].percentual}%` : '—';
+
+  const seteDiasAtrasMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const concluidosSemana = adminProgressoCache.filter(
+    (p) => p.concluido_em && new Date(p.concluido_em).getTime() >= seteDiasAtrasMs
+  ).length;
+  kpiSemana.textContent = String(concluidosSemana);
+}
+
+function renderizarTabelaAdmin() {
+  const termo = filtroColaborador.value.trim().toLowerCase();
+  const ordenacao = ordenarColaborador.value;
+
+  let estatisticas = calcularEstatisticasColaboradores();
+
+  if (termo) {
+    estatisticas = estatisticas.filter(
+      (e) => e.nome.toLowerCase().includes(termo) || e.usuario.toLowerCase().includes(termo)
+    );
+  }
+
+  if (ordenacao === 'progresso-desc') estatisticas.sort((a, b) => b.percentual - a.percentual);
+  else if (ordenacao === 'progresso-asc') estatisticas.sort((a, b) => a.percentual - b.percentual);
+  else estatisticas.sort((a, b) => a.nome.localeCompare(b.nome));
+
+  tabelaAdmin.innerHTML = '';
+
+  if (estatisticas.length === 0) {
+    tabelaAdmin.innerHTML = '<p class="painel-geral__resumo">Nenhum colaborador encontrado.</p>';
+    return;
+  }
+
+  estatisticas.forEach((e) => {
+    const linha = document.createElement('div');
+    linha.className = `linha-admin${e.ativo === false ? ' linha-admin--inativo' : ''}`;
+    linha.innerHTML = `
+      <span class="linha-admin__nome">${escapeHtml(e.nome)} <span class="linha-admin__usuario">@${escapeHtml(e.usuario)}</span></span>
+      ${e.is_admin ? '<span class="linha-admin__badge-admin">admin</span>' : ''}
+      ${e.ativo === false ? '<span class="linha-admin__badge-inativo">inativo</span>' : ''}
+      ${e.parado && e.ativo !== false ? `<span class="linha-admin__badge-parado">${e.diasParado === null ? 'sem começar' : `parado há ${e.diasParado}d`}</span>` : ''}
+      <span class="linha-admin__barra"><span class="linha-admin__barra-preenchimento" style="width:${e.percentual}%"></span></span>
+      <span class="linha-admin__percentual">${e.concluidos}/${totalTopicosGlobal} · ${e.percentual}%</span>
+    `;
+    linha.addEventListener('click', () => abrirModalColaborador(e));
+    tabelaAdmin.appendChild(linha);
+  });
+}
+
+filtroColaborador.addEventListener('input', () => renderizarTabelaAdmin());
+ordenarColaborador.addEventListener('change', () => renderizarTabelaAdmin());
+
+// =========================================================
+// MODAL: DETALHE DO COLABORADOR
+// =========================================================
+btnFecharColaborador.addEventListener('click', () => fecharModalColaborador());
+modalColaboradorFundo.addEventListener('click', () => fecharModalColaborador());
+
+function abrirModalColaborador(colaborador) {
+  colaboradorAberto = colaborador;
+  colabAcoesFeedback.hidden = true;
+
+  colabNome.textContent = colaborador.nome;
+  colabUsuario.textContent = `@${colaborador.usuario}`;
+
+  colabBadges.innerHTML = `
+    ${colaborador.is_admin ? '<span class="linha-admin__badge-admin">admin</span>' : ''}
+    ${colaborador.ativo === false ? '<span class="linha-admin__badge-inativo">inativo</span>' : ''}
+    ${colaborador.parado && colaborador.ativo !== false ? `<span class="linha-admin__badge-parado">${colaborador.diasParado === null ? 'sem começar' : `parado há ${colaborador.diasParado}d`}</span>` : ''}
+  `;
+
+  const souEu = colaborador.id === sessaoAtual.user.id;
+  btnColabAlternarAcesso.textContent = colaborador.ativo === false ? 'Ativar acesso' : 'Desativar acesso';
+  btnColabAlternarAcesso.disabled = souEu;
+  btnColabAlternarAcesso.title = souEu ? 'Você não pode desativar o próprio acesso.' : '';
+  btnColabAlternarAdmin.textContent = colaborador.is_admin ? 'Remover admin' : 'Tornar admin';
+  btnColabAlternarAdmin.disabled = souEu;
+  btnColabAlternarAdmin.title = souEu ? 'Você não pode alterar seu próprio nível de acesso por aqui.' : '';
+
+  const concluidosDoColaborador = new Set(
+    adminProgressoCache.filter((p) => p.usuario_id === colaborador.id).map((p) => p.topico_id)
+  );
+
+  colabChecklist.innerHTML = trilhasGlobais.map((trilha) => `
+    <p class="checklist-trilha__titulo">${escapeHtml(trilha.titulo)}</p>
+    ${trilha.topicos.map((topico) => {
+      const feito = concluidosDoColaborador.has(topico.id);
+      return `
+        <div class="checklist-item ${feito ? 'checklist-item--feito' : 'checklist-item--pendente'}">
+          <span class="checklist-item__marca">${feito ? '✓' : '○'}</span>
+          <span>${escapeHtml(topico.titulo)}</span>
+        </div>
+      `;
+    }).join('')}
+  `).join('');
+
+  modalColaborador.hidden = false;
+}
+
+function fecharModalColaborador() {
+  modalColaborador.hidden = true;
+  colaboradorAberto = null;
+}
+
+btnColabResetarSenha.addEventListener('click', async () => {
+  if (!colaboradorAberto) return;
+  colabAcoesFeedback.hidden = true;
+
+  const confirmar = confirm(`Redefinir a senha de ${colaboradorAberto.nome} para a senha padrão (qaz@123)?`);
+  if (!confirmar) return;
+
+  btnColabResetarSenha.disabled = true;
+  try {
+    const resposta = await fetch('/api/redefinir-senha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessaoAtual.access_token}` },
+      body: JSON.stringify({ usuarioId: colaboradorAberto.id }),
+    });
+    const resultado = await resposta.json();
+
+    colabAcoesFeedback.style.color = resposta.ok ? 'var(--verde)' : '';
+    colabAcoesFeedback.textContent = resposta.ok
+      ? `Senha redefinida para: ${resultado.senha}`
+      : (resultado.error ?? 'Erro ao redefinir senha.');
+    colabAcoesFeedback.hidden = false;
+  } catch {
+    colabAcoesFeedback.style.color = '';
+    colabAcoesFeedback.textContent = 'Falha de conexão. Tente novamente.';
+    colabAcoesFeedback.hidden = false;
+  } finally {
+    btnColabResetarSenha.disabled = false;
+  }
+});
+
+btnColabAlternarAcesso.addEventListener('click', async () => {
+  if (!colaboradorAberto) return;
+  colabAcoesFeedback.hidden = true;
+
+  const vaiAtivar = colaboradorAberto.ativo === false;
+  const acao = vaiAtivar ? 'reativar o acesso de' : 'desativar o acesso de';
+  if (!confirm(`Tem certeza que quer ${acao} ${colaboradorAberto.nome}?`)) return;
+
+  btnColabAlternarAcesso.disabled = true;
+  try {
+    const resposta = await fetch('/api/alternar-acesso', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessaoAtual.access_token}` },
+      body: JSON.stringify({ usuarioId: colaboradorAberto.id, ativar: vaiAtivar }),
+    });
+    const resultado = await resposta.json();
+
+    if (!resposta.ok) {
+      colabAcoesFeedback.style.color = '';
+      colabAcoesFeedback.textContent = resultado.error ?? 'Erro ao alterar acesso.';
+      colabAcoesFeedback.hidden = false;
+      return;
+    }
+
+    colaboradorAberto.ativo = vaiAtivar;
+    painelAdminCarregado = false;
+    await carregarPainelAdmin();
+    abrirModalColaborador({ ...colaboradorAberto });
+  } catch {
+    colabAcoesFeedback.style.color = '';
+    colabAcoesFeedback.textContent = 'Falha de conexão. Tente novamente.';
+    colabAcoesFeedback.hidden = false;
+  } finally {
+    btnColabAlternarAcesso.disabled = false;
+  }
+});
+
+btnColabAlternarAdmin.addEventListener('click', async () => {
+  if (!colaboradorAberto) return;
+  colabAcoesFeedback.hidden = true;
+
+  const vaiVirarAdmin = !colaboradorAberto.is_admin;
+  const acao = vaiVirarAdmin ? 'dar acesso de administrador a' : 'remover o acesso de administrador de';
+  if (!confirm(`Tem certeza que quer ${acao} ${colaboradorAberto.nome}?`)) return;
+
+  btnColabAlternarAdmin.disabled = true;
+  const { error } = await supabase.from('perfis').update({ is_admin: vaiVirarAdmin }).eq('id', colaboradorAberto.id);
+  btnColabAlternarAdmin.disabled = false;
+
+  if (error) {
+    colabAcoesFeedback.style.color = '';
+    colabAcoesFeedback.textContent = error.message ?? 'Erro ao alterar nível de acesso.';
+    colabAcoesFeedback.hidden = false;
+    return;
+  }
+
+  colaboradorAberto.is_admin = vaiVirarAdmin;
+  painelAdminCarregado = false;
+  await carregarPainelAdmin();
+  abrirModalColaborador({ ...colaboradorAberto });
+});
 
 function renderizarGraficoEvolucao(progressoConcluido, totalColaboradores) {
   const totalPossivel = totalTopicosGlobal * totalColaboradores;
@@ -426,6 +694,112 @@ function slugify(texto) {
     .replace(/^-+|-+$/g, '');
 }
 
+// =========================================================
+// GERENCIAR TRILHAS E TÓPICOS (editar / excluir)
+// =========================================================
+function renderizarGerenciarTrilhas() {
+  if (trilhasGlobais.length === 0) {
+    gerenciarTrilhasEl.innerHTML = '<p class="painel-geral__resumo">Nenhuma trilha cadastrada ainda.</p>';
+    return;
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  gerenciarTrilhasEl.innerHTML = trilhasGlobais.map((trilha) => {
+    const atrasada = trilha.prazo && trilha.prazo < hoje;
+    return `
+    <div class="gerenciar-trilha" data-trilha-id="${escapeHtml(trilha.id)}">
+      <div class="gerenciar-trilha__linha">
+        <input class="gerenciar-trilha__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(trilha.titulo)}" />
+        <input class="gerenciar-trilha__campo-descricao" data-campo="descricao" type="text" value="${escapeHtml(trilha.descricao ?? '')}" placeholder="Descrição" />
+        <input class="gerenciar-trilha__campo-prazo" data-campo="prazo" type="date" value="${trilha.prazo ?? ''}" />
+        ${atrasada ? '<span class="badge-atrasada">atrasada</span>' : ''}
+        <div class="gerenciar-trilha__botoes">
+          <button type="button" class="botao botao--fantasma botao--mini" data-acao="salvar-trilha">Salvar</button>
+          <button type="button" class="botao botao--perigo botao--mini" data-acao="excluir-trilha">Excluir</button>
+        </div>
+      </div>
+      <div class="gerenciar-trilha__topicos">
+        ${trilha.topicos.map((topico) => `
+          <div class="gerenciar-topico__linha" data-topico-id="${escapeHtml(topico.id)}">
+            <input class="gerenciar-topico__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(topico.titulo)}" />
+            <input class="gerenciar-topico__campo-url" data-campo="url" type="text" value="${escapeHtml(topico.url ?? '')}" placeholder="Link (opcional)" />
+            <div class="gerenciar-trilha__botoes">
+              <button type="button" class="botao botao--fantasma botao--mini" data-acao="salvar-topico">Salvar</button>
+              <button type="button" class="botao botao--perigo botao--mini" data-acao="excluir-topico">Excluir</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+gerenciarTrilhasEl.addEventListener('click', async (evento) => {
+  const botao = evento.target.closest('button[data-acao]');
+  if (!botao) return;
+
+  const acao = botao.dataset.acao;
+
+  if (acao === 'salvar-trilha' || acao === 'excluir-trilha') {
+    const bloco = botao.closest('.gerenciar-trilha');
+    const trilhaId = bloco.dataset.trilhaId;
+
+    if (acao === 'excluir-trilha') {
+      const trilha = trilhasGlobais.find((t) => t.id === trilhaId);
+      if (!confirm(`Excluir a trilha "${trilha?.titulo}" e todos os seus ${trilha?.topicos.length ?? 0} materiais? Isso também apaga o progresso já registrado nela.`)) return;
+
+      const { error } = await supabase.from('trilhas').delete().eq('id', trilhaId);
+      if (error) { alert(error.message ?? 'Erro ao excluir trilha.'); return; }
+    } else {
+      const titulo = bloco.querySelector('[data-campo="titulo"]').value.trim();
+      const descricao = bloco.querySelector('[data-campo="descricao"]').value.trim();
+      const prazo = bloco.querySelector('[data-campo="prazo"]').value || null;
+      if (!titulo) { alert('O título não pode ficar vazio.'); return; }
+
+      const { error } = await supabase
+        .from('trilhas')
+        .update({ titulo, descricao: descricao || null, prazo })
+        .eq('id', trilhaId);
+      if (error) { alert(error.message ?? 'Erro ao salvar trilha.'); return; }
+    }
+
+    await iniciarDashboard();
+    painelAdmin.hidden = false;
+    visaoColaborador.hidden = true;
+    btnAdmin.textContent = 'Minhas trilhas';
+    painelAdminCarregado = false;
+    await carregarPainelAdmin();
+    return;
+  }
+
+  if (acao === 'salvar-topico' || acao === 'excluir-topico') {
+    const linha = botao.closest('.gerenciar-topico__linha');
+    const topicoId = linha.dataset.topicoId;
+
+    if (acao === 'excluir-topico') {
+      if (!confirm('Excluir este material? Isso também apaga o progresso já registrado nele.')) return;
+      const { error } = await supabase.from('topicos').delete().eq('id', topicoId);
+      if (error) { alert(error.message ?? 'Erro ao excluir material.'); return; }
+    } else {
+      const titulo = linha.querySelector('[data-campo="titulo"]').value.trim();
+      const url = linha.querySelector('[data-campo="url"]').value.trim();
+      if (!titulo) { alert('O título não pode ficar vazio.'); return; }
+
+      const { error } = await supabase.from('topicos').update({ titulo, url: url || null }).eq('id', topicoId);
+      if (error) { alert(error.message ?? 'Erro ao salvar material.'); return; }
+    }
+
+    await iniciarDashboard();
+    painelAdmin.hidden = false;
+    visaoColaborador.hidden = true;
+    btnAdmin.textContent = 'Minhas trilhas';
+    painelAdminCarregado = false;
+    await carregarPainelAdmin();
+  }
+});
+
 formNovoUsuario.addEventListener('submit', async (evento) => {
   evento.preventDefault();
   adminFeedback.hidden = true;
@@ -475,6 +849,7 @@ formNovaTrilha.addEventListener('submit', async (evento) => {
 
   const titulo = trilhaTitulo.value.trim();
   const descricao = trilhaDescricao.value.trim();
+  const prazo = trilhaPrazo.value || null;
   if (!titulo) return;
 
   const id = slugify(titulo);
@@ -483,7 +858,7 @@ formNovaTrilha.addEventListener('submit', async (evento) => {
   btnNovaTrilha.disabled = true;
   btnNovaTrilha.querySelector('span').textContent = 'Criando…';
 
-  const { error } = await supabase.from('trilhas').insert({ id, titulo, descricao: descricao || null, ordem });
+  const { error } = await supabase.from('trilhas').insert({ id, titulo, descricao: descricao || null, prazo, ordem });
 
   btnNovaTrilha.disabled = false;
   btnNovaTrilha.querySelector('span').textContent = 'Criar trilha';
