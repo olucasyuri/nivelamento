@@ -25,6 +25,9 @@ const listaTrilhas = document.getElementById('lista-trilhas');
 const resumoTopicos = document.getElementById('resumo-topicos');
 const gaugeValor = document.getElementById('gauge-valor');
 const gaugePercentual = document.getElementById('gauge-percentual');
+const btnContinuar = document.getElementById('btn-continuar');
+const toastCelebracao = document.getElementById('toast-celebracao');
+const toastTexto = document.getElementById('toast-texto');
 
 const btnAdmin = document.getElementById('btn-admin');
 const painelAdmin = document.getElementById('painel-admin');
@@ -1036,22 +1039,25 @@ formNovoTopico.addEventListener('submit', async (evento) => {
 
 function renderizarTrilhas(trilhas) {
   listaTrilhas.innerHTML = '';
+  const hoje = new Date().toISOString().slice(0, 10);
 
   trilhas.forEach((trilha, indice) => {
     const total = trilha.topicos.length;
     const concluidos = trilha.topicos.filter((t) => progressoPorTopico.get(t.id)?.concluido).length;
     const percentual = total > 0 ? Math.round((concluidos / total) * 100) : 0;
+    const atrasada = trilha.prazo && trilha.prazo < hoje && percentual < 100;
 
     const card = document.createElement('article');
-    card.className = 'trilha';
+    card.className = `trilha ${classeEstadoTrilha(percentual)}`;
     card.dataset.trilhaId = trilha.id;
 
     card.innerHTML = `
       <button type="button" class="trilha__cabecalho" aria-expanded="false">
         <span class="trilha__numero">BOX ${String(indice + 1).padStart(2, '0')}</span>
         <span class="trilha__texto">
-          <p class="trilha__titulo">${escapeHtml(trilha.titulo)}</p>
+          <p class="trilha__titulo">${escapeHtml(trilha.titulo)} ${percentual >= 100 ? '<span class="trilha__badge-concluida">✓ concluída</span>' : ''}</p>
           <p class="trilha__descricao">${escapeHtml(trilha.descricao ?? '')}</p>
+          ${trilha.prazo ? `<p class="trilha__prazo ${atrasada ? 'trilha__prazo--atrasado' : ''}">${atrasada ? 'Prazo vencido' : 'Prazo'}: ${formatarDataBR(trilha.prazo)}</p>` : ''}
         </span>
         <span class="trilha__medidor">
           <span class="trilha__barra"><span class="trilha__barra-preenchimento" style="width:${percentual}%"></span></span>
@@ -1074,16 +1080,48 @@ function renderizarTrilhas(trilhas) {
 
     listaTrilhas.appendChild(card);
   });
+
+  atualizarBotaoContinuar(trilhas);
+}
+
+function classeEstadoTrilha(percentual) {
+  if (percentual >= 100) return 'trilha--concluida';
+  if (percentual > 0) return 'trilha--em-andamento';
+  return 'trilha--nao-iniciada';
+}
+
+// ---------- ícone por tipo de material, a partir da URL ----------
+function iconePorMaterial(url) {
+  if (!url) return { icone: '', rotulo: 'Abrir material' };
+  const u = url.toLowerCase();
+  if (u.includes('youtube.com') || u.includes('youtu.be')) {
+    return {
+      icone: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M6.8 6.3v3.4l3-1.7-3-1.7Z" fill="currentColor"/></svg>',
+      rotulo: 'Assistir vídeo',
+    };
+  }
+  if (u.includes('docs.google.com/presentation')) {
+    return {
+      icone: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 14.5h7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+      rotulo: 'Ver apresentação',
+    };
+  }
+  return {
+    icone: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 1.5h5.5L12.5 4.5V14a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V2a.5.5 0 0 1 .5-.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.5 1.5V4.5H12.5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+    rotulo: 'Abrir artigo',
+  };
 }
 
 function criarLinhaTopico(topico, trilha, card) {
   const linha = document.createElement('label');
   linha.className = 'topico';
+  linha.dataset.topicoId = topico.id;
 
   const jaConcluido = !!progressoPorTopico.get(topico.id)?.concluido;
+  const { icone, rotulo } = iconePorMaterial(topico.url);
 
   const linkHtml = topico.url
-    ? `<a class="topico__link" href="${escapeHtml(topico.url)}" target="_blank" rel="noopener noreferrer">Abrir material →</a>`
+    ? `<a class="topico__link" href="${escapeHtml(topico.url)}" target="_blank" rel="noopener noreferrer">${icone}${rotulo} →</a>`
     : `<span class="topico__sem-link">Material offline — solicite acesso ao time</span>`;
 
   linha.innerHTML = `
@@ -1096,12 +1134,21 @@ function criarLinhaTopico(topico, trilha, card) {
 
   const checkbox = linha.querySelector('input');
   checkbox.addEventListener('change', async () => {
+    const totalTrilha = trilha.topicos.length;
+    const concluidosAntes = trilha.topicos.filter((t) => progressoPorTopico.get(t.id)?.concluido).length;
+    const estavaCompleta = totalTrilha > 0 && concluidosAntes === totalTrilha;
+
     checkbox.disabled = true;
     await alternarProgresso(topico, checkbox.checked);
     linha.querySelector('.topico__titulo').classList.toggle('topico__titulo--concluido', checkbox.checked);
     checkbox.disabled = false;
     atualizarMedidorTrilha(card, trilha);
     atualizarResumoGeral(null); // recalcula usando o cache já atualizado
+    atualizarBotaoContinuar(trilhasGlobais);
+
+    const concluidosDepois = trilha.topicos.filter((t) => progressoPorTopico.get(t.id)?.concluido).length;
+    const estaCompleta = totalTrilha > 0 && concluidosDepois === totalTrilha;
+    if (!estavaCompleta && estaCompleta) mostrarCelebracao(trilha.titulo);
   });
 
   return linha;
@@ -1137,6 +1184,67 @@ function atualizarMedidorTrilha(card, trilha) {
 
   card.querySelector('.trilha__barra-preenchimento').style.width = `${percentual}%`;
   card.querySelector('.trilha__percentual').textContent = `${percentual}%`;
+
+  card.classList.remove('trilha--concluida', 'trilha--em-andamento', 'trilha--nao-iniciada');
+  card.classList.add(classeEstadoTrilha(percentual));
+
+  const tituloEl = card.querySelector('.trilha__titulo');
+  const jaTemBadge = tituloEl.querySelector('.trilha__badge-concluida');
+  if (percentual >= 100 && !jaTemBadge) {
+    tituloEl.insertAdjacentHTML('beforeend', ' <span class="trilha__badge-concluida">✓ concluída</span>');
+  } else if (percentual < 100 && jaTemBadge) {
+    jaTemBadge.remove();
+  }
+}
+
+// =========================================================
+// ATALHO "CONTINUAR DE ONDE PAREI"
+// =========================================================
+function atualizarBotaoContinuar(trilhas) {
+  const proximo = encontrarProximoPendente(trilhas);
+  btnContinuar.hidden = !proximo;
+}
+
+function encontrarProximoPendente(trilhas) {
+  for (const trilha of trilhas) {
+    const pendente = trilha.topicos.find((t) => !progressoPorTopico.get(t.id)?.concluido);
+    if (pendente) return { trilha, topico: pendente };
+  }
+  return null;
+}
+
+btnContinuar.addEventListener('click', () => {
+  const proximo = encontrarProximoPendente(trilhasGlobais);
+  if (!proximo) return;
+
+  const card = listaTrilhas.querySelector(`.trilha[data-trilha-id="${CSS.escape(proximo.trilha.id)}"]`);
+  if (!card) return;
+
+  if (!card.classList.contains('aberta')) {
+    card.classList.add('aberta');
+    card.querySelector('.trilha__cabecalho').setAttribute('aria-expanded', 'true');
+  }
+
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.add('trilha--destacada');
+  setTimeout(() => card.classList.remove('trilha--destacada'), 2800);
+
+  const linhaTopico = card.querySelector(`.topico[data-topico-id="${CSS.escape(proximo.topico.id)}"]`);
+  if (linhaTopico) {
+    linhaTopico.classList.add('topico--destacado');
+    setTimeout(() => linhaTopico.classList.remove('topico--destacado'), 2800);
+  }
+});
+
+// =========================================================
+// CELEBRAÇÃO AO CONCLUIR UMA TRILHA
+// =========================================================
+let temporizadorToast = null;
+function mostrarCelebracao(tituloTrilha) {
+  toastTexto.textContent = `Trilha concluída: ${tituloTrilha}!`;
+  toastCelebracao.hidden = false;
+  clearTimeout(temporizadorToast);
+  temporizadorToast = setTimeout(() => { toastCelebracao.hidden = true; }, 3200);
 }
 
 function atualizarResumoGeral(trilhasOpcional) {

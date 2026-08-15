@@ -272,12 +272,20 @@
         <p class="painel-geral__eyebrow">Volta geral</p>
         <h2 class="painel-geral__titulo">Seu progresso na temporada</h2>
         <p id="resumo-topicos" class="painel-geral__resumo">Carregando trilhas…</p>
+        <button type="button" id="btn-continuar" class="botao botao--primario botao--continuar" hidden>
+          <span>Continuar de onde parei →</span>
+        </button>
       </div>
     </section>
 
     <section id="lista-trilhas" class="lista-trilhas" aria-live="polite">
       <!-- cards de trilha inseridos via JS -->
     </section>
+  </div>
+
+  <div id="toast-celebracao" class="toast" hidden>
+    <span class="toast__bandeira">🏁</span>
+    <span id="toast-texto">Trilha concluída!</span>
   </div>
 
 </main>
