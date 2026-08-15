@@ -695,55 +695,155 @@ function slugify(texto) {
 }
 
 // =========================================================
-// GERENCIAR TRILHAS E TÓPICOS (editar / excluir)
+// GERENCIAR TRILHAS E TÓPICOS (acordeão + leitura/edição + busca)
 // =========================================================
+const buscaTreinamentos = document.getElementById('busca-treinamentos');
+let gerenciarAbertas = new Set(); // ids de trilha com o acordeão expandido
+let gerenciarTrilhaEditando = null; // id da trilha cujo cabeçalho está em modo edição
+let gerenciarTopicoEditando = null; // id do tópico cuja linha está em modo edição
+
+const iconeChevron = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const iconeEditar = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.3 2.3a1 1 0 0 1 1.4 0l1 1a1 1 0 0 1 0 1.4l-7 7-3 .6.6-3 7-7Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+const iconeExcluir = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4.5 4.5 5 13a1 1 0 0 0 1 .9h4a1 1 0 0 0 1-.9l.5-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const iconeAbrir = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 3H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9.5M9.5 2.5H13.5V6.5M13 3 7.5 8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function renderizarGerenciarTrilhas() {
+  const termo = buscaTreinamentos.value.trim().toLowerCase();
+
+  const trilhasFiltradas = termo
+    ? trilhasGlobais.filter((t) =>
+        t.titulo.toLowerCase().includes(termo) ||
+        t.topicos.some((top) => top.titulo.toLowerCase().includes(termo))
+      )
+    : trilhasGlobais;
+
   if (trilhasGlobais.length === 0) {
     gerenciarTrilhasEl.innerHTML = '<p class="painel-geral__resumo">Nenhuma trilha cadastrada ainda.</p>';
+    return;
+  }
+  if (trilhasFiltradas.length === 0) {
+    gerenciarTrilhasEl.innerHTML = '<p class="painel-geral__resumo">Nenhum resultado para essa busca.</p>';
     return;
   }
 
   const hoje = new Date().toISOString().slice(0, 10);
 
-  gerenciarTrilhasEl.innerHTML = trilhasGlobais.map((trilha) => {
+  gerenciarTrilhasEl.innerHTML = trilhasFiltradas.map((trilha) => {
     const atrasada = trilha.prazo && trilha.prazo < hoje;
+    const aberta = gerenciarAbertas.has(trilha.id) || (termo && trilha.topicos.some((top) => top.titulo.toLowerCase().includes(termo)));
+    const editandoTrilha = gerenciarTrilhaEditando === trilha.id;
+
     return `
-    <div class="gerenciar-trilha" data-trilha-id="${escapeHtml(trilha.id)}">
-      <div class="gerenciar-trilha__linha">
-        <input class="gerenciar-trilha__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(trilha.titulo)}" />
-        <input class="gerenciar-trilha__campo-descricao" data-campo="descricao" type="text" value="${escapeHtml(trilha.descricao ?? '')}" placeholder="Descrição" />
-        <input class="gerenciar-trilha__campo-prazo" data-campo="prazo" type="date" value="${trilha.prazo ?? ''}" />
-        ${atrasada ? '<span class="badge-atrasada">atrasada</span>' : ''}
-        <div class="gerenciar-trilha__botoes">
-          <button type="button" class="botao botao--fantasma botao--mini" data-acao="salvar-trilha">Salvar</button>
-          <button type="button" class="botao botao--perigo botao--mini" data-acao="excluir-trilha">Excluir</button>
+    <div class="gerenciar-trilha ${aberta ? 'gerenciar-trilha--aberta' : ''}" data-trilha-id="${escapeHtml(trilha.id)}">
+      <div class="gerenciar-trilha__cabecalho" data-acao="toggle-trilha">
+        ${editandoTrilha ? `
+          <div class="gerenciar-trilha__campos" data-campos-trilha>
+            <input class="gerenciar-trilha__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(trilha.titulo)}" />
+            <input class="gerenciar-trilha__campo-descricao" data-campo="descricao" type="text" value="${escapeHtml(trilha.descricao ?? '')}" placeholder="Descrição" />
+            <input class="gerenciar-trilha__campo-prazo" data-campo="prazo" type="date" value="${trilha.prazo ?? ''}" />
+          </div>
+        ` : `
+          <div class="gerenciar-trilha__info">
+            <p class="gerenciar-trilha__titulo">${escapeHtml(trilha.titulo)} ${atrasada ? '<span class="badge-atrasada">atrasada</span>' : ''}</p>
+            <p class="gerenciar-trilha__meta">${trilha.topicos.length} material(is)${trilha.prazo ? ` · prazo ${formatarDataBR(trilha.prazo)}` : ''}</p>
+          </div>
+        `}
+        <div class="gerenciar-trilha__acoes">
+          ${editandoTrilha ? `
+            <button type="button" class="botao--icone" data-acao="salvar-trilha" title="Salvar">${iconeCheck()}</button>
+            <button type="button" class="botao--icone" data-acao="cancelar-trilha" title="Cancelar">${iconeX()}</button>
+          ` : `
+            <button type="button" class="botao--icone" data-acao="editar-trilha" title="Editar">${iconeEditar}</button>
+            <button type="button" class="botao--icone botao--icone-perigo" data-acao="excluir-trilha" title="Excluir">${iconeExcluir}</button>
+            <span class="gerenciar-trilha__chevron">${iconeChevron}</span>
+          `}
         </div>
       </div>
+
       <div class="gerenciar-trilha__topicos">
-        ${trilha.topicos.map((topico) => `
+        ${trilha.topicos.map((topico) => {
+          const editandoTopico = gerenciarTopicoEditando === topico.id;
+          return `
           <div class="gerenciar-topico__linha" data-topico-id="${escapeHtml(topico.id)}">
-            <input class="gerenciar-topico__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(topico.titulo)}" />
-            <input class="gerenciar-topico__campo-url" data-campo="url" type="text" value="${escapeHtml(topico.url ?? '')}" placeholder="Link (opcional)" />
-            <div class="gerenciar-trilha__botoes">
-              <button type="button" class="botao botao--fantasma botao--mini" data-acao="salvar-topico">Salvar</button>
-              <button type="button" class="botao botao--perigo botao--mini" data-acao="excluir-topico">Excluir</button>
-            </div>
+            ${editandoTopico ? `
+              <input class="gerenciar-topico__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(topico.titulo)}" />
+              <input class="gerenciar-topico__campo-url" data-campo="url" type="text" value="${escapeHtml(topico.url ?? '')}" placeholder="Link (opcional)" />
+              <div class="gerenciar-topico__acoes">
+                <button type="button" class="botao--icone" data-acao="salvar-topico" title="Salvar">${iconeCheck()}</button>
+                <button type="button" class="botao--icone" data-acao="cancelar-topico" title="Cancelar">${iconeX()}</button>
+              </div>
+            ` : `
+              <span class="gerenciar-topico__titulo">${escapeHtml(topico.titulo)}</span>
+              ${topico.url ? `<a class="gerenciar-topico__link" href="${escapeHtml(topico.url)}" target="_blank" rel="noopener noreferrer" title="Abrir material">${iconeAbrir}</a>` : '<span class="gerenciar-topico__sem-link">sem link</span>'}
+              <div class="gerenciar-topico__acoes">
+                <button type="button" class="botao--icone" data-acao="editar-topico" title="Editar">${iconeEditar}</button>
+                <button type="button" class="botao--icone botao--icone-perigo" data-acao="excluir-topico" title="Excluir">${iconeExcluir}</button>
+              </div>
+            `}
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     </div>
   `;
   }).join('');
 }
 
+function iconeCheck() {
+  return '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function iconeX() {
+  return '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+}
+function formatarDataBR(isoData) {
+  const [ano, mes, dia] = isoData.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+buscaTreinamentos.addEventListener('input', () => renderizarGerenciarTrilhas());
+
 gerenciarTrilhasEl.addEventListener('click', async (evento) => {
-  const botao = evento.target.closest('button[data-acao]');
-  if (!botao) return;
+  const alvoAcao = evento.target.closest('[data-acao]');
+  if (!alvoAcao) return;
+  const acao = alvoAcao.dataset.acao;
 
-  const acao = botao.dataset.acao;
+  // ---------- alternar acordeão ----------
+  if (acao === 'toggle-trilha') {
+    if (evento.target.closest('button, a, input')) return; // não conflita com botões/links dentro do cabeçalho
+    const bloco = alvoAcao.closest('.gerenciar-trilha');
+    const trilhaId = bloco.dataset.trilhaId;
+    if (gerenciarAbertas.has(trilhaId)) gerenciarAbertas.delete(trilhaId);
+    else gerenciarAbertas.add(trilhaId);
+    renderizarGerenciarTrilhas();
+    return;
+  }
 
+  // ---------- editar/cancelar (só troca modo, sem ir ao banco) ----------
+  if (acao === 'editar-trilha') {
+    gerenciarTrilhaEditando = alvoAcao.closest('.gerenciar-trilha').dataset.trilhaId;
+    gerenciarAbertas.add(gerenciarTrilhaEditando);
+    renderizarGerenciarTrilhas();
+    return;
+  }
+  if (acao === 'cancelar-trilha') {
+    gerenciarTrilhaEditando = null;
+    renderizarGerenciarTrilhas();
+    return;
+  }
+  if (acao === 'editar-topico') {
+    gerenciarTopicoEditando = alvoAcao.closest('.gerenciar-topico__linha').dataset.topicoId;
+    renderizarGerenciarTrilhas();
+    return;
+  }
+  if (acao === 'cancelar-topico') {
+    gerenciarTopicoEditando = null;
+    renderizarGerenciarTrilhas();
+    return;
+  }
+
+  // ---------- salvar/excluir trilha ----------
   if (acao === 'salvar-trilha' || acao === 'excluir-trilha') {
-    const bloco = botao.closest('.gerenciar-trilha');
+    const bloco = alvoAcao.closest('.gerenciar-trilha');
     const trilhaId = bloco.dataset.trilhaId;
 
     if (acao === 'excluir-trilha') {
@@ -752,6 +852,7 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
 
       const { error } = await supabase.from('trilhas').delete().eq('id', trilhaId);
       if (error) { alert(error.message ?? 'Erro ao excluir trilha.'); return; }
+      gerenciarAbertas.delete(trilhaId);
     } else {
       const titulo = bloco.querySelector('[data-campo="titulo"]').value.trim();
       const descricao = bloco.querySelector('[data-campo="descricao"]').value.trim();
@@ -763,6 +864,7 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
         .update({ titulo, descricao: descricao || null, prazo })
         .eq('id', trilhaId);
       if (error) { alert(error.message ?? 'Erro ao salvar trilha.'); return; }
+      gerenciarTrilhaEditando = null;
     }
 
     await iniciarDashboard();
@@ -774,8 +876,9 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
     return;
   }
 
+  // ---------- salvar/excluir tópico ----------
   if (acao === 'salvar-topico' || acao === 'excluir-topico') {
-    const linha = botao.closest('.gerenciar-topico__linha');
+    const linha = alvoAcao.closest('.gerenciar-topico__linha');
     const topicoId = linha.dataset.topicoId;
 
     if (acao === 'excluir-topico') {
@@ -791,6 +894,7 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
       if (error) { alert(error.message ?? 'Erro ao salvar material.'); return; }
     }
 
+    gerenciarTopicoEditando = null;
     await iniciarDashboard();
     painelAdmin.hidden = false;
     visaoColaborador.hidden = true;
