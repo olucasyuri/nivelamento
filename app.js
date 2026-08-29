@@ -53,8 +53,11 @@ const topicoTitulo = document.getElementById('topico-titulo');
 const topicoAnexosLista = document.getElementById('topico-anexos-lista');
 const btnAddAnexoLink = document.getElementById('btn-add-anexo-link');
 const btnAddAnexoArquivo = document.getElementById('btn-add-anexo-arquivo');
+const topicoAtribuicoesContainer = document.getElementById('topico-atribuicoes-container');
 const btnNovoTopico = document.getElementById('btn-novo-topico');
 const topicoFeedback = document.getElementById('topico-feedback');
+let seletorAtribuicoesNovoMaterial = null;
+let seletorAtribuicoesEdicao = null;
 
 const canvasEvolucao = document.getElementById('grafico-evolucao');
 const canvasTrilhas = document.getElementById('grafico-trilhas');
@@ -246,7 +249,7 @@ async function iniciarDashboard() {
   const [{ data: trilhas, error: erroTrilhas }, { data: progresso, error: erroProgresso }] = await Promise.all([
     supabase
       .from('trilhas')
-      .select('id, titulo, descricao, prazo, ordem, topicos(id, titulo, url, ordem, topico_anexos(id, titulo, url, tipo, ordem))')
+      .select('id, titulo, descricao, prazo, ordem, topicos(id, titulo, url, ordem, topico_anexos(id, titulo, url, tipo, ordem), topico_atribuicoes(id, colaborador_id))')
       .order('ordem', { ascending: true }),
     supabase
       .from('progresso')
@@ -318,7 +321,60 @@ async function carregarPainelAdmin() {
   renderizarGraficoEvolucao(adminProgressoCache, totalColaboradores);
   renderizarGraficoTrilhas(adminProgressoCache, totalColaboradores);
 
+  seletorAtribuicoesNovoMaterial = montarSeletorColaboradores(topicoAtribuicoesContainer, []);
+
   painelAdminCarregado = true;
+}
+
+// ---------- seletor de colaboradores (busca + checklist), usado tanto no
+// formulário "Novo material" quanto na edição de um material existente ----------
+function montarSeletorColaboradores(containerPai, idsIniciais) {
+  containerPai.innerHTML = '';
+  const marcados = new Set(idsIniciais);
+
+  const busca = document.createElement('input');
+  busca.type = 'text';
+  busca.className = 'atribuicoes-busca';
+  busca.placeholder = 'Buscar colaborador...';
+
+  const lista = document.createElement('div');
+  lista.className = 'atribuicoes-lista';
+
+  function renderLista() {
+    const termo = busca.value.trim().toLowerCase();
+    lista.innerHTML = '';
+    const filtrados = (adminPerfisCache ?? []).filter(
+      (p) => !termo || p.nome.toLowerCase().includes(termo) || p.usuario.toLowerCase().includes(termo)
+    );
+    if (filtrados.length === 0) {
+      lista.innerHTML = '<p class="atribuicoes-lista__vazio">Nenhum colaborador encontrado.</p>';
+      return;
+    }
+    filtrados.forEach((p) => {
+      const item = document.createElement('label');
+      item.className = 'atribuicao-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = marcados.has(p.id);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) marcados.add(p.id);
+        else marcados.delete(p.id);
+      });
+
+      const span = document.createElement('span');
+      span.textContent = `${p.nome} (${p.usuario})`;
+
+      item.append(checkbox, span);
+      lista.appendChild(item);
+    });
+  }
+
+  busca.addEventListener('input', renderLista);
+  containerPai.append(busca, lista);
+  renderLista();
+
+  return { getMarcados: () => Array.from(marcados) };
 }
 
 // ---------- estatísticas por colaborador (reutilizadas pela tabela, KPIs e modal) ----------
@@ -777,12 +833,16 @@ function renderizarGerenciarTrilhas() {
             ${editandoTopico ? `
               <input class="gerenciar-topico__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(topico.titulo)}" />
               <div class="gerenciar-topico__anexos-edit" data-topico-anexos-edit></div>
+              <div class="gerenciar-topico__atribuicoes-edit" data-topico-atribuicoes-edit></div>
               <div class="gerenciar-topico__acoes">
                 <button type="button" class="botao--icone" data-acao="salvar-topico" title="Salvar">${iconeCheck()}</button>
                 <button type="button" class="botao--icone" data-acao="cancelar-topico" title="Cancelar">${iconeX()}</button>
               </div>
             ` : `
               <span class="gerenciar-topico__titulo">${escapeHtml(topico.titulo)}</span>
+              ${(topico.topico_atribuicoes ?? []).length > 0
+                ? `<span class="gerenciar-topico__badge-restrito" title="Visível só para colaboradores específicos">🔒 ${topico.topico_atribuicoes.length}</span>`
+                : ''}
               ${anexos.length > 0
                 ? `<span class="gerenciar-topico__anexos-view">${anexos.map((anexo) =>
                     `<a class="gerenciar-topico__link" href="${escapeHtml(anexo.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(anexo.titulo || 'Abrir material')}">${iconeAbrir}</a>`
@@ -863,6 +923,14 @@ function montarAnexosEdicao() {
 
   botoes.append(btnLink, btnArquivo);
   container.appendChild(botoes);
+
+  const containerAtribuicoes = gerenciarTrilhasEl.querySelector(
+    `.gerenciar-topico__linha[data-topico-id="${gerenciarTopicoEditando}"] [data-topico-atribuicoes-edit]`
+  );
+  if (containerAtribuicoes) {
+    const idsAtuais = (topicoAtual.topico_atribuicoes ?? []).map((a) => a.colaborador_id);
+    seletorAtribuicoesEdicao = montarSeletorColaboradores(containerAtribuicoes, idsAtuais);
+  }
 }
 
 function iconeCheck() {
@@ -913,6 +981,7 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
   }
   if (acao === 'cancelar-topico') {
     gerenciarTopicoEditando = null;
+    seletorAtribuicoesEdicao = null;
     renderizarGerenciarTrilhas();
     return;
   }
@@ -986,10 +1055,32 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
         const { error: erroInserir } = await supabase.from('topico_anexos').insert(inseridos);
         if (erroInserir) erros.push(erroInserir.message ?? 'Erro ao salvar um dos anexos novos.');
       }
+
+      const idsAtribuicoesOriginais = (topicoAtual?.topico_atribuicoes ?? []).map((a) => a.colaborador_id);
+      const idsAtribuicoesFinais = seletorAtribuicoesEdicao ? seletorAtribuicoesEdicao.getMarcados() : idsAtribuicoesOriginais;
+      const idsParaRemoverAtrib = idsAtribuicoesOriginais.filter((id) => !idsAtribuicoesFinais.includes(id));
+      const idsParaAdicionarAtrib = idsAtribuicoesFinais.filter((id) => !idsAtribuicoesOriginais.includes(id));
+
+      if (idsParaRemoverAtrib.length > 0) {
+        const { error: erroRemoverAtrib } = await supabase
+          .from('topico_atribuicoes')
+          .delete()
+          .eq('topico_id', topicoId)
+          .in('colaborador_id', idsParaRemoverAtrib);
+        if (erroRemoverAtrib) erros.push(erroRemoverAtrib.message ?? 'Erro ao atualizar quem pode ver o material.');
+      }
+      if (idsParaAdicionarAtrib.length > 0) {
+        const { error: erroAdicionarAtrib } = await supabase
+          .from('topico_atribuicoes')
+          .insert(idsParaAdicionarAtrib.map((colaborador_id) => ({ topico_id: topicoId, colaborador_id })));
+        if (erroAdicionarAtrib) erros.push(erroAdicionarAtrib.message ?? 'Erro ao atualizar quem pode ver o material.');
+      }
+
       if (erros.length > 0) alert(erros.join(' '));
     }
 
     gerenciarTopicoEditando = null;
+    seletorAtribuicoesEdicao = null;
     await iniciarDashboard();
     painelAdmin.hidden = false;
     visaoColaborador.hidden = true;
@@ -1232,6 +1323,14 @@ formNovoTopico.addEventListener('submit', async (evento) => {
     if (erroAnexos) erros.push(erroAnexos.message ?? 'Erro ao salvar um dos anexos.');
   }
 
+  const idsAtribuidos = seletorAtribuicoesNovoMaterial ? seletorAtribuicoesNovoMaterial.getMarcados() : [];
+  if (idsAtribuidos.length > 0) {
+    const { error: erroAtribuicoes } = await supabase
+      .from('topico_atribuicoes')
+      .insert(idsAtribuidos.map((colaborador_id) => ({ topico_id: novoTopico.id, colaborador_id })));
+    if (erroAtribuicoes) erros.push(erroAtribuicoes.message ?? 'Erro ao salvar quem pode ver o material.');
+  }
+
   btnNovoTopico.disabled = false;
   btnNovoTopico.querySelector('span').textContent = 'Adicionar material';
 
@@ -1259,8 +1358,9 @@ formNovoTopico.addEventListener('submit', async (evento) => {
 function renderizarTrilhas(trilhas) {
   listaTrilhas.innerHTML = '';
   const hoje = new Date().toISOString().slice(0, 10);
+  const trilhasVisiveis = trilhas.filter((t) => t.topicos.length > 0);
 
-  trilhas.forEach((trilha, indice) => {
+  trilhasVisiveis.forEach((trilha, indice) => {
     const total = trilha.topicos.length;
     const concluidos = trilha.topicos.filter((t) => progressoPorTopico.get(t.id)?.concluido).length;
     const percentual = total > 0 ? Math.round((concluidos / total) * 100) : 0;
