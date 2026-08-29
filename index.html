@@ -243,10 +243,14 @@
           <span class="campo__rotulo">Título do material</span>
           <input id="topico-titulo" type="text" placeholder="ex: Cadastro de motoboys" required />
         </label>
-        <label class="campo">
-          <span class="campo__rotulo">Link (opcional)</span>
-          <input id="topico-url" type="text" placeholder="https://..." />
-        </label>
+        <div class="campo">
+          <span class="campo__rotulo">Links e arquivos (opcional, pode adicionar vários)</span>
+          <div id="topico-anexos-lista" class="anexos-lista"></div>
+          <div class="anexos-lista__botoes">
+            <button type="button" id="btn-add-anexo-link" class="botao botao--fantasma">+ Adicionar link</button>
+            <button type="button" id="btn-add-anexo-arquivo" class="botao botao--fantasma">+ Anexar arquivo</button>
+          </div>
+        </div>
         <button type="submit" id="btn-novo-topico" class="botao botao--primario">
           <span>Adicionar material</span>
         </button>
