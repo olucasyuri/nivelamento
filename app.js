@@ -8,6 +8,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = 'https://kbibdhrcculvoxeymfwt.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiaWJkaHJjY3Vsdm94ZXltZnd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzODgxODksImV4cCI6MjEwMTk2NDE4OX0.tAQRO4BvXoE_lwFgIZnDcycoJiO-eukc0D6NlQfqcp0';
 const DOMINIO_EMAIL = 'pitstop.local'; // precisa bater com o usado no seed_usuarios.js
+const STORAGE_BUCKET = 'materiais'; // bucket criado pelo sql/2026-08-topico-anexos.sql
+const TAMANHO_MAX_ARQUIVO = 50 * 1024 * 1024; // 50MB
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -48,7 +50,9 @@ const trilhaFeedback = document.getElementById('trilha-feedback');
 const formNovoTopico = document.getElementById('form-novo-topico');
 const topicoTrilhaSelect = document.getElementById('topico-trilha');
 const topicoTitulo = document.getElementById('topico-titulo');
-const topicoUrl = document.getElementById('topico-url');
+const topicoAnexosLista = document.getElementById('topico-anexos-lista');
+const btnAddAnexoLink = document.getElementById('btn-add-anexo-link');
+const btnAddAnexoArquivo = document.getElementById('btn-add-anexo-arquivo');
 const btnNovoTopico = document.getElementById('btn-novo-topico');
 const topicoFeedback = document.getElementById('topico-feedback');
 
@@ -242,7 +246,7 @@ async function iniciarDashboard() {
   const [{ data: trilhas, error: erroTrilhas }, { data: progresso, error: erroProgresso }] = await Promise.all([
     supabase
       .from('trilhas')
-      .select('id, titulo, descricao, prazo, ordem, topicos(id, titulo, url, ordem)')
+      .select('id, titulo, descricao, prazo, ordem, topicos(id, titulo, url, ordem, topico_anexos(id, titulo, url, tipo, ordem))')
       .order('ordem', { ascending: true }),
     supabase
       .from('progresso')
@@ -259,6 +263,7 @@ async function iniciarDashboard() {
   (progresso ?? []).forEach((p) => progressoPorTopico.set(p.topico_id, p));
 
   trilhas.forEach((t) => t.topicos.sort((a, b) => a.ordem - b.ordem));
+  trilhas.forEach((t) => t.topicos.forEach((top) => (top.topico_anexos ?? []).sort((a, b) => a.ordem - b.ordem)));
   trilhas.sort((a, b) => a.ordem - b.ordem);
 
   totalTopicosGlobal = trilhas.reduce((soma, t) => soma + t.topicos.length, 0);
@@ -766,18 +771,23 @@ function renderizarGerenciarTrilhas() {
       <div class="gerenciar-trilha__topicos">
         ${trilha.topicos.map((topico) => {
           const editandoTopico = gerenciarTopicoEditando === topico.id;
+          const anexos = topico.topico_anexos ?? [];
           return `
           <div class="gerenciar-topico__linha" data-topico-id="${escapeHtml(topico.id)}">
             ${editandoTopico ? `
               <input class="gerenciar-topico__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(topico.titulo)}" />
-              <input class="gerenciar-topico__campo-url" data-campo="url" type="text" value="${escapeHtml(topico.url ?? '')}" placeholder="Link (opcional)" />
+              <div class="gerenciar-topico__anexos-edit" data-topico-anexos-edit></div>
               <div class="gerenciar-topico__acoes">
                 <button type="button" class="botao--icone" data-acao="salvar-topico" title="Salvar">${iconeCheck()}</button>
                 <button type="button" class="botao--icone" data-acao="cancelar-topico" title="Cancelar">${iconeX()}</button>
               </div>
             ` : `
               <span class="gerenciar-topico__titulo">${escapeHtml(topico.titulo)}</span>
-              ${topico.url ? `<a class="gerenciar-topico__link" href="${escapeHtml(topico.url)}" target="_blank" rel="noopener noreferrer" title="Abrir material">${iconeAbrir}</a>` : '<span class="gerenciar-topico__sem-link">sem link</span>'}
+              ${anexos.length > 0
+                ? `<span class="gerenciar-topico__anexos-view">${anexos.map((anexo) =>
+                    `<a class="gerenciar-topico__link" href="${escapeHtml(anexo.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(anexo.titulo || 'Abrir material')}">${iconeAbrir}</a>`
+                  ).join('')}</span>`
+                : '<span class="gerenciar-topico__sem-link">sem link</span>'}
               <div class="gerenciar-topico__acoes">
                 <button type="button" class="botao--icone" data-acao="editar-topico" title="Editar">${iconeEditar}</button>
                 <button type="button" class="botao--icone botao--icone-perigo" data-acao="excluir-topico" title="Excluir">${iconeExcluir}</button>
@@ -790,6 +800,69 @@ function renderizarGerenciarTrilhas() {
     </div>
   `;
   }).join('');
+
+  montarAnexosEdicao();
+}
+
+// Popula a área de anexos do material que está em edição (não dá pra ir
+// direto no template acima porque <input type="file"> perde o arquivo
+// selecionado sempre que o HTML é regerado via innerHTML).
+function montarAnexosEdicao() {
+  if (!gerenciarTopicoEditando) return;
+  const container = gerenciarTrilhasEl.querySelector(
+    `.gerenciar-topico__linha[data-topico-id="${gerenciarTopicoEditando}"] [data-topico-anexos-edit]`
+  );
+  if (!container) return;
+
+  const topicoAtual = trilhasGlobais.flatMap((t) => t.topicos).find((t) => t.id === gerenciarTopicoEditando);
+  if (!topicoAtual) return;
+
+  container.innerHTML = '';
+
+  (topicoAtual.topico_anexos ?? []).forEach((anexo) => {
+    const linha = document.createElement('div');
+    linha.className = 'anexo-linha anexo-linha--existente';
+    linha.dataset.anexoId = anexo.id;
+    const nome = anexo.titulo || (anexo.tipo === 'arquivo' ? 'Arquivo' : 'Link');
+
+    const label = document.createElement('span');
+    label.className = 'anexo-linha__label';
+    label.textContent = nome + ' ';
+    const link = document.createElement('a');
+    link.href = anexo.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'abrir';
+    label.appendChild(link);
+
+    const btnRemover = document.createElement('button');
+    btnRemover.type = 'button';
+    btnRemover.className = 'botao--icone anexo-remover';
+    btnRemover.title = 'Remover';
+    btnRemover.innerHTML = iconeX();
+    btnRemover.addEventListener('click', () => linha.remove());
+
+    linha.append(label, btnRemover);
+    container.appendChild(linha);
+  });
+
+  const botoes = document.createElement('div');
+  botoes.className = 'anexos-lista__botoes';
+
+  const btnLink = document.createElement('button');
+  btnLink.type = 'button';
+  btnLink.className = 'botao botao--fantasma';
+  btnLink.textContent = '+ Adicionar link';
+  btnLink.addEventListener('click', () => container.insertBefore(criarLinhaAnexoNovo('link'), botoes));
+
+  const btnArquivo = document.createElement('button');
+  btnArquivo.type = 'button';
+  btnArquivo.className = 'botao botao--fantasma';
+  btnArquivo.textContent = '+ Anexar arquivo';
+  btnArquivo.addEventListener('click', () => container.insertBefore(criarLinhaAnexoNovo('arquivo'), botoes));
+
+  botoes.append(btnLink, btnArquivo);
+  container.appendChild(botoes);
 }
 
 function iconeCheck() {
@@ -890,11 +963,30 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
       if (error) { alert(error.message ?? 'Erro ao excluir material.'); return; }
     } else {
       const titulo = linha.querySelector('[data-campo="titulo"]').value.trim();
-      const url = linha.querySelector('[data-campo="url"]').value.trim();
       if (!titulo) { alert('O título não pode ficar vazio.'); return; }
 
-      const { error } = await supabase.from('topicos').update({ titulo, url: url || null }).eq('id', topicoId);
+      const anexosContainer = linha.querySelector('[data-topico-anexos-edit]');
+      const topicoAtual = trilhasGlobais.flatMap((t) => t.topicos).find((t) => t.id === topicoId);
+      const idsOriginais = (topicoAtual?.topico_anexos ?? []).map((a) => a.id);
+      const idsMantidos = new Set(
+        Array.from(anexosContainer.querySelectorAll('.anexo-linha--existente')).map((el) => el.dataset.anexoId)
+      );
+      const idsParaRemover = idsOriginais.filter((id) => !idsMantidos.has(id));
+
+      const { error } = await supabase.from('topicos').update({ titulo }).eq('id', topicoId);
       if (error) { alert(error.message ?? 'Erro ao salvar material.'); return; }
+
+      if (idsParaRemover.length > 0) {
+        const { error: erroRemover } = await supabase.from('topico_anexos').delete().in('id', idsParaRemover);
+        if (erroRemover) alert(erroRemover.message ?? 'Erro ao remover algum anexo.');
+      }
+
+      const { inseridos, erros } = await processarAnexosNovos(anexosContainer, topicoId, idsMantidos.size + 1);
+      if (inseridos.length > 0) {
+        const { error: erroInserir } = await supabase.from('topico_anexos').insert(inseridos);
+        if (erroInserir) erros.push(erroInserir.message ?? 'Erro ao salvar um dos anexos novos.');
+      }
+      if (erros.length > 0) alert(erros.join(' '));
     }
 
     gerenciarTopicoEditando = null;
@@ -992,13 +1084,125 @@ formNovaTrilha.addEventListener('submit', async (evento) => {
   await carregarPainelAdmin();
 });
 
+// =========================================================
+// ANEXOS (links e arquivos de um material) — usado tanto no
+// formulário "Novo material" quanto na edição de um material existente.
+// =========================================================
+
+// Detecta caminhos de arquivo local/rede que NÃO funcionam num navegador
+// de outra pessoa (ex: C:\Pasta\arquivo.pdf ou \\servidor\pasta\arquivo.pdf).
+function pareceCaminhoLocal(valor) {
+  const v = valor.trim();
+  return /^[a-zA-Z]:[\\/]/.test(v) || v.startsWith('\\\\') || v.toLowerCase().startsWith('file://');
+}
+
+// Valida/normaliza um link colado pelo admin. Retorna { ok: true, url } ou
+// { ok: false, motivo } com uma mensagem explicando o que corrigir.
+function normalizarUrlAnexo(valor) {
+  const v = valor.trim();
+  if (!v) return { ok: false, motivo: '' };
+  if (pareceCaminhoLocal(v)) {
+    return {
+      ok: false,
+      motivo: `"${v}" parece ser um caminho de arquivo do seu computador ou da rede local — isso não abre no navegador de outra pessoa. Use o botão "Anexar arquivo" para enviar o arquivo de verdade.`,
+    };
+  }
+  if (/^https?:\/\//i.test(v)) return { ok: true, url: v };
+  if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(v)) return { ok: true, url: `https://${v}` };
+  return {
+    ok: false,
+    motivo: `"${v}" não parece um link válido. Cole um endereço começando com https:// ou use "Anexar arquivo".`,
+  };
+}
+
+// Envia um arquivo para o bucket de Storage e devolve a URL pública dele.
+async function uploadArquivoAnexo(file, topicoId) {
+  if (file.size > TAMANHO_MAX_ARQUIVO) {
+    return { ok: false, motivo: `"${file.name}" tem mais de 50MB — envie um arquivo menor ou use um link (Google Drive, etc).` };
+  }
+  const nomeSeguro = file.name.replace(/[^\w.\-]+/g, '_');
+  const caminho = `topicos/${topicoId}/${Date.now()}-${nomeSeguro}`;
+  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(caminho, file, { upsert: false });
+  if (error) {
+    return {
+      ok: false,
+      motivo: `Falha ao enviar "${file.name}": ${error.message}${error.message?.includes('Bucket not found') ? ' — o bucket "materiais" ainda não foi criado no Supabase (rode sql/2026-08-topico-anexos.sql).' : ''}`,
+    };
+  }
+  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(caminho);
+  return { ok: true, url: data.publicUrl };
+}
+
+// Cria a linha de UM anexo ainda não salvo (link ou arquivo), com botão de remover.
+function criarLinhaAnexoNovo(tipo) {
+  const linha = document.createElement('div');
+  linha.className = 'anexo-linha anexo-linha--novo';
+  linha.dataset.tipo = tipo;
+
+  const campoTitulo = document.createElement('input');
+  campoTitulo.type = 'text';
+  campoTitulo.className = 'anexo-titulo';
+  campoTitulo.placeholder = tipo === 'link' ? 'Nome do link (opcional)' : 'Nome do arquivo (opcional)';
+
+  const campoValor = document.createElement('input');
+  if (tipo === 'link') {
+    campoValor.type = 'text';
+    campoValor.className = 'anexo-url';
+    campoValor.placeholder = 'https://...';
+  } else {
+    campoValor.type = 'file';
+    campoValor.className = 'anexo-arquivo';
+  }
+
+  const btnRemover = document.createElement('button');
+  btnRemover.type = 'button';
+  btnRemover.className = 'botao--icone anexo-remover';
+  btnRemover.title = 'Remover';
+  btnRemover.innerHTML = iconeX();
+  btnRemover.addEventListener('click', () => linha.remove());
+
+  linha.append(campoTitulo, campoValor, btnRemover);
+  return linha;
+}
+
+// Percorre as linhas .anexo-linha--novo de um container, valida/faz upload
+// de cada uma e devolve { inseridos, erros } prontos para inserir no banco.
+async function processarAnexosNovos(container, topicoId, ordemInicial = 1) {
+  const erros = [];
+  const inseridos = [];
+  let ordem = ordemInicial;
+
+  for (const linha of container.querySelectorAll('.anexo-linha--novo')) {
+    const tipo = linha.dataset.tipo;
+    const tituloValor = linha.querySelector('.anexo-titulo').value.trim() || null;
+
+    if (tipo === 'link') {
+      const bruto = linha.querySelector('.anexo-url').value.trim();
+      if (!bruto) continue;
+      const resultado = normalizarUrlAnexo(bruto);
+      if (!resultado.ok) { if (resultado.motivo) erros.push(resultado.motivo); continue; }
+      inseridos.push({ topico_id: topicoId, titulo: tituloValor, url: resultado.url, tipo: 'link', ordem: ordem++ });
+    } else {
+      const file = linha.querySelector('.anexo-arquivo').files[0];
+      if (!file) continue;
+      const resultado = await uploadArquivoAnexo(file, topicoId);
+      if (!resultado.ok) { erros.push(resultado.motivo); continue; }
+      inseridos.push({ topico_id: topicoId, titulo: tituloValor || file.name, url: resultado.url, tipo: 'arquivo', ordem: ordem++ });
+    }
+  }
+
+  return { inseridos, erros };
+}
+
+btnAddAnexoLink.addEventListener('click', () => topicoAnexosLista.appendChild(criarLinhaAnexoNovo('link')));
+btnAddAnexoArquivo.addEventListener('click', () => topicoAnexosLista.appendChild(criarLinhaAnexoNovo('arquivo')));
+
 formNovoTopico.addEventListener('submit', async (evento) => {
   evento.preventDefault();
   topicoFeedback.hidden = true;
 
   const trilhaId = topicoTrilhaSelect.value;
   const titulo = topicoTitulo.value.trim();
-  const url = topicoUrl.value.trim();
   if (!trilhaId || !titulo) return;
 
   const trilha = trilhasGlobais.find((t) => t.id === trilhaId);
@@ -1007,27 +1211,42 @@ formNovoTopico.addEventListener('submit', async (evento) => {
   btnNovoTopico.disabled = true;
   btnNovoTopico.querySelector('span').textContent = 'Adicionando…';
 
-  const { error } = await supabase.from('topicos').insert({
-    trilha_id: trilhaId,
-    titulo,
-    url: url || null,
-    ordem,
-  });
-
-  btnNovoTopico.disabled = false;
-  btnNovoTopico.querySelector('span').textContent = 'Adicionar material';
+  const { data: novoTopico, error } = await supabase
+    .from('topicos')
+    .insert({ trilha_id: trilhaId, titulo, ordem })
+    .select()
+    .single();
 
   if (error) {
+    btnNovoTopico.disabled = false;
+    btnNovoTopico.querySelector('span').textContent = 'Adicionar material';
     topicoFeedback.style.color = '';
     topicoFeedback.textContent = error.message ?? 'Erro ao adicionar material.';
     topicoFeedback.hidden = false;
     return;
   }
 
-  topicoFeedback.style.color = 'var(--verde)';
-  topicoFeedback.textContent = `Material "${titulo}" adicionado!`;
-  topicoFeedback.hidden = false;
+  const { inseridos, erros } = await processarAnexosNovos(topicoAnexosLista, novoTopico.id);
+  if (inseridos.length > 0) {
+    const { error: erroAnexos } = await supabase.from('topico_anexos').insert(inseridos);
+    if (erroAnexos) erros.push(erroAnexos.message ?? 'Erro ao salvar um dos anexos.');
+  }
+
+  btnNovoTopico.disabled = false;
+  btnNovoTopico.querySelector('span').textContent = 'Adicionar material';
+
+  if (erros.length > 0) {
+    topicoFeedback.style.color = '';
+    topicoFeedback.textContent = `Material "${titulo}" foi criado, mas: ${erros.join(' ')}`;
+    topicoFeedback.hidden = false;
+  } else {
+    topicoFeedback.style.color = 'var(--verde)';
+    topicoFeedback.textContent = `Material "${titulo}" adicionado!`;
+    topicoFeedback.hidden = false;
+  }
+
   formNovoTopico.reset();
+  topicoAnexosLista.innerHTML = '';
 
   await iniciarDashboard();
   painelAdmin.hidden = false;
@@ -1118,19 +1337,31 @@ function criarLinhaTopico(topico, trilha, card) {
   linha.dataset.topicoId = topico.id;
 
   const jaConcluido = !!progressoPorTopico.get(topico.id)?.concluido;
-  const { icone, rotulo } = iconePorMaterial(topico.url);
+  const anexos = topico.topico_anexos ?? [];
 
-  const linkHtml = topico.url
-    ? `<a class="topico__link" href="${escapeHtml(topico.url)}" target="_blank" rel="noopener noreferrer">${icone}${rotulo} →</a>`
+  const linksHtml = anexos.length > 0
+    ? `<span class="topico__links">${anexos.map((anexo) => {
+        const { icone, rotulo } = iconePorMaterial(anexo.url);
+        const nome = anexo.titulo ? escapeHtml(anexo.titulo) : rotulo;
+        return `<a class="topico__link" href="${escapeHtml(anexo.url)}" target="_blank" rel="noopener noreferrer">${icone}${nome} →</a>`;
+      }).join('')}</span>`
     : `<span class="topico__sem-link">Material offline — solicite acesso ao time</span>`;
 
   linha.innerHTML = `
     <input type="checkbox" ${jaConcluido ? 'checked' : ''} />
     <span class="topico__texto">
       <p class="topico__titulo ${jaConcluido ? 'topico__titulo--concluido' : ''}">${escapeHtml(topico.titulo)}</p>
-      ${linkHtml}
+      ${linksHtml}
     </span>
   `;
+
+  // A linha inteira é um <label> (pra clicar em qualquer lugar marcar o
+  // checkbox). Sem isto, clicar num link também aciona o toggle do
+  // checkbox e, em vários navegadores, o clique no link parece "não fazer
+  // nada" — por isso os materiais pareciam não abrir.
+  linha.querySelectorAll('.topico__link').forEach((a) => {
+    a.addEventListener('click', (evento) => evento.stopPropagation());
+  });
 
   const checkbox = linha.querySelector('input');
   checkbox.addEventListener('change', async () => {
