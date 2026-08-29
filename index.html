@@ -120,11 +120,9 @@
       </div>
 
       <div class="modal-colaborador__atribuicoes">
-        <p class="modal-colaborador__subtitulo">Materiais restritos</p>
-        <p class="campo__ajuda">Marque quais materiais restritos esse colaborador pode ver. Materiais sem restrição já aparecem pra ele automaticamente.</p>
+        <p class="modal-colaborador__subtitulo">O que ele(a) pode assistir</p>
+        <p class="campo__ajuda">Marque os materiais que este colaborador pode ver. O que não estiver marcado, ele(a) não consegue assistir.</p>
         <div id="colab-atribuicoes-lista" class="atribuicoes-colab-lista"></div>
-        <button type="button" id="btn-colab-restringir-novo" class="botao botao--fantasma">+ Restringir um material visível a todos</button>
-        <div id="colab-restringir-novo-painel" class="restringir-novo-painel" hidden></div>
       </div>
 
       <div class="modal__acoes">
@@ -259,6 +257,11 @@
             <button type="button" id="btn-add-anexo-arquivo" class="botao botao--fantasma">+ Anexar arquivo</button>
           </div>
         </div>
+        <label class="campo campo--checkbox">
+          <input type="checkbox" id="topico-liberar-todos" checked />
+          <span>Liberar este material para todos os colaboradores atuais agora</span>
+        </label>
+        <p class="campo__ajuda">Desmarque se este material for restrito só a alguém específico — você configura quem vê depois, no perfil de cada colaborador.</p>
         <button type="submit" id="btn-novo-topico" class="botao botao--primario">
           <span>Adicionar material</span>
         </button>
