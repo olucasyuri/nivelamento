@@ -194,6 +194,9 @@ input { font-family: inherit; }
 .gerenciar-topico__anexos-edit .anexos-lista__botoes { margin-top: 2px; }
 
 .campo__ajuda { font-size: 11.5px; color: var(--texto-mudo); margin: -2px 0 2px; }
+.campo--checkbox { flex-direction: row; align-items: center; gap: 8px; }
+.campo--checkbox input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--laranja); flex-shrink: 0; }
+.campo--checkbox span { font-size: 13px; }
 
 .atribuicoes-busca {
   width: 100%;
@@ -231,6 +234,27 @@ input { font-family: inherit; }
   padding: 2px 8px;
   flex-shrink: 0;
   white-space: nowrap;
+}
+.gerenciar-topico__badge-invisivel {
+  font-size: 11px;
+  color: var(--laranja);
+  background: color-mix(in srgb, var(--laranja) 12%, transparent);
+  border: 1px solid var(--laranja);
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.gerenciar-topico__badge-todos {
+  font-size: 11px;
+  color: var(--texto-mudo);
+  background: transparent;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  opacity: 0.7;
 }
 .gerenciar-topico__atribuicoes-edit { width: 100%; margin-top: 6px; }
 
@@ -404,15 +428,24 @@ input { font-family: inherit; }
 .atribuicoes-colab-lista__vazio { font-size: 12px; color: var(--texto-mudo); padding: 6px 2px; margin: 0; }
 .atribuicao-colab-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
 .atribuicao-colab-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--laranja); background: none; border: none; padding: 0; flex-shrink: 0; }
-.restringir-novo-painel {
-  border: 1px solid var(--borda);
-  border-radius: 8px;
-  padding: 10px;
-  margin-top: 8px;
+.checklist-trilha__cabecalho {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
+.checklist-trilha__cabecalho .checklist-trilha__titulo { margin: 12px 0 4px; }
+.link-acao {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--laranja);
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+.link-acao:hover { opacity: 0.8; }
 
 /* ---------------- KPIs ---------------- */
 .kpis {
