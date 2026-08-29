@@ -104,6 +104,7 @@ let sessaoAtual = null;
 let progressoPorTopico = new Map(); // topico_id -> { id, concluido }
 let totalTopicosGlobal = 0;
 let trilhasGlobais = []; // lista completa de trilhas+tópicos, usada pelo painel admin
+let trilhasVisiveis = []; // mesma lista, já filtrada pelos materiais restritos do colaborador logado
 let painelAdminCarregado = false;
 let graficoEvolucao = null;
 let graficoTrilhas = null;
@@ -273,8 +274,19 @@ async function iniciarDashboard() {
   trilhasGlobais = trilhas;
   preencherSelectDeTrilhas(trilhas);
 
-  renderizarTrilhas(trilhas);
-  atualizarResumoGeral(trilhas);
+  // Um tópico só aparece pra todo mundo se NÃO tiver nenhuma atribuição
+  // (topico_atribuicoes vazio). Se tiver atribuição, só quem está na lista
+  // de atribuídos enxerga — os demais nem veem que ele existe.
+  trilhasVisiveis = trilhas.map((t) => ({
+    ...t,
+    topicos: t.topicos.filter((topico) => {
+      const atribuicoes = topico.topico_atribuicoes ?? [];
+      return atribuicoes.length === 0 || atribuicoes.some((a) => a.colaborador_id === userId);
+    }),
+  }));
+
+  renderizarTrilhas(trilhasVisiveis);
+  atualizarResumoGeral(trilhasVisiveis);
 }
 
 function preencherSelectDeTrilhas(trilhas) {
@@ -1533,7 +1545,7 @@ function criarLinhaTopico(topico, trilha, card) {
     checkbox.disabled = false;
     atualizarMedidorTrilha(card, trilha);
     atualizarResumoGeral(null); // recalcula usando o cache já atualizado
-    atualizarBotaoContinuar(trilhasGlobais);
+    atualizarBotaoContinuar(trilhasVisiveis);
 
     const concluidosDepois = trilha.topicos.filter((t) => progressoPorTopico.get(t.id)?.concluido).length;
     const estaCompleta = totalTrilha > 0 && concluidosDepois === totalTrilha;
@@ -1603,7 +1615,7 @@ function encontrarProximoPendente(trilhas) {
 }
 
 btnContinuar.addEventListener('click', () => {
-  const proximo = encontrarProximoPendente(trilhasGlobais);
+  const proximo = encontrarProximoPendente(trilhasVisiveis);
   if (!proximo) return;
 
   const card = listaTrilhas.querySelector(`.trilha[data-trilha-id="${CSS.escape(proximo.trilha.id)}"]`);
