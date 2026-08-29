@@ -53,11 +53,8 @@ const topicoTitulo = document.getElementById('topico-titulo');
 const topicoAnexosLista = document.getElementById('topico-anexos-lista');
 const btnAddAnexoLink = document.getElementById('btn-add-anexo-link');
 const btnAddAnexoArquivo = document.getElementById('btn-add-anexo-arquivo');
-const topicoAtribuicoesContainer = document.getElementById('topico-atribuicoes-container');
 const btnNovoTopico = document.getElementById('btn-novo-topico');
 const topicoFeedback = document.getElementById('topico-feedback');
-let seletorAtribuicoesNovoMaterial = null;
-let seletorAtribuicoesEdicao = null;
 
 const canvasEvolucao = document.getElementById('grafico-evolucao');
 const canvasTrilhas = document.getElementById('grafico-trilhas');
@@ -81,6 +78,9 @@ const colabNome = document.getElementById('colab-nome');
 const colabUsuario = document.getElementById('colab-usuario');
 const colabBadges = document.getElementById('colab-badges');
 const colabChecklist = document.getElementById('colab-checklist');
+const colabAtribuicoesLista = document.getElementById('colab-atribuicoes-lista');
+const btnColabRestringirNovo = document.getElementById('btn-colab-restringir-novo');
+const colabRestringirNovoPainel = document.getElementById('colab-restringir-novo-painel');
 const btnColabResetarSenha = document.getElementById('btn-colab-resetar-senha');
 const btnColabAlternarAcesso = document.getElementById('btn-colab-alternar-acesso');
 const btnColabAlternarAdmin = document.getElementById('btn-colab-alternar-admin');
@@ -321,60 +321,7 @@ async function carregarPainelAdmin() {
   renderizarGraficoEvolucao(adminProgressoCache, totalColaboradores);
   renderizarGraficoTrilhas(adminProgressoCache, totalColaboradores);
 
-  seletorAtribuicoesNovoMaterial = montarSeletorColaboradores(topicoAtribuicoesContainer, []);
-
   painelAdminCarregado = true;
-}
-
-// ---------- seletor de colaboradores (busca + checklist), usado tanto no
-// formulário "Novo material" quanto na edição de um material existente ----------
-function montarSeletorColaboradores(containerPai, idsIniciais) {
-  containerPai.innerHTML = '';
-  const marcados = new Set(idsIniciais);
-
-  const busca = document.createElement('input');
-  busca.type = 'text';
-  busca.className = 'atribuicoes-busca';
-  busca.placeholder = 'Buscar colaborador...';
-
-  const lista = document.createElement('div');
-  lista.className = 'atribuicoes-lista';
-
-  function renderLista() {
-    const termo = busca.value.trim().toLowerCase();
-    lista.innerHTML = '';
-    const filtrados = (adminPerfisCache ?? []).filter(
-      (p) => !termo || p.nome.toLowerCase().includes(termo) || p.usuario.toLowerCase().includes(termo)
-    );
-    if (filtrados.length === 0) {
-      lista.innerHTML = '<p class="atribuicoes-lista__vazio">Nenhum colaborador encontrado.</p>';
-      return;
-    }
-    filtrados.forEach((p) => {
-      const item = document.createElement('label');
-      item.className = 'atribuicao-item';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = marcados.has(p.id);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) marcados.add(p.id);
-        else marcados.delete(p.id);
-      });
-
-      const span = document.createElement('span');
-      span.textContent = `${p.nome} (${p.usuario})`;
-
-      item.append(checkbox, span);
-      lista.appendChild(item);
-    });
-  }
-
-  busca.addEventListener('input', renderLista);
-  containerPai.append(busca, lista);
-  renderLista();
-
-  return { getMarcados: () => Array.from(marcados) };
 }
 
 // ---------- estatísticas por colaborador (reutilizadas pela tabela, KPIs e modal) ----------
@@ -529,7 +476,157 @@ function abrirModalColaborador(colaborador) {
     }).join('')}
   `).join('');
 
+  colabRestringirNovoPainel.hidden = true;
+  colabRestringirNovoPainel.innerHTML = '';
+  renderizarAtribuicoesColaborador();
+
   modalColaborador.hidden = false;
+}
+
+// ---------- materiais restritos, geridos direto no perfil do colaborador ----------
+function renderizarAtribuicoesColaborador() {
+  if (!colaboradorAberto) return;
+
+  const materiaisRestritos = [];
+  trilhasGlobais.forEach((trilha) => {
+    trilha.topicos.forEach((topico) => {
+      if ((topico.topico_atribuicoes ?? []).length > 0) {
+        materiaisRestritos.push({ trilhaTitulo: trilha.titulo, topico });
+      }
+    });
+  });
+
+  if (materiaisRestritos.length === 0) {
+    colabAtribuicoesLista.innerHTML = '<p class="atribuicoes-colab-lista__vazio">Nenhum material restrito cadastrado ainda.</p>';
+    return;
+  }
+
+  colabAtribuicoesLista.innerHTML = '';
+  let trilhaAtual = null;
+  materiaisRestritos.forEach(({ trilhaTitulo, topico }) => {
+    if (trilhaTitulo !== trilhaAtual) {
+      trilhaAtual = trilhaTitulo;
+      const titulo = document.createElement('p');
+      titulo.className = 'checklist-trilha__titulo';
+      titulo.textContent = trilhaTitulo;
+      colabAtribuicoesLista.appendChild(titulo);
+    }
+
+    const marcado = (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id);
+
+    const item = document.createElement('label');
+    item.className = 'atribuicao-colab-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = marcado;
+    checkbox.addEventListener('change', () => alternarAtribuicaoColaborador(topico, checkbox));
+
+    const span = document.createElement('span');
+    span.textContent = topico.titulo;
+
+    item.append(checkbox, span);
+    colabAtribuicoesLista.appendChild(item);
+  });
+}
+
+// Marca/desmarca este colaborador num material restrito — salva na hora,
+// sem precisar de botão "salvar" separado.
+async function alternarAtribuicaoColaborador(topico, checkbox) {
+  checkbox.disabled = true;
+
+  if (checkbox.checked) {
+    const { data, error } = await supabase
+      .from('topico_atribuicoes')
+      .insert({ topico_id: topico.id, colaborador_id: colaboradorAberto.id })
+      .select()
+      .single();
+    if (error) {
+      alert(error.message ?? 'Erro ao atribuir material.');
+      checkbox.checked = false;
+    } else {
+      topico.topico_atribuicoes = [...(topico.topico_atribuicoes ?? []), { id: data.id, colaborador_id: colaboradorAberto.id }];
+    }
+  } else {
+    const { error } = await supabase
+      .from('topico_atribuicoes')
+      .delete()
+      .eq('topico_id', topico.id)
+      .eq('colaborador_id', colaboradorAberto.id);
+    if (error) {
+      alert(error.message ?? 'Erro ao remover atribuição.');
+      checkbox.checked = true;
+    } else {
+      topico.topico_atribuicoes = (topico.topico_atribuicoes ?? []).filter((a) => a.colaborador_id !== colaboradorAberto.id);
+    }
+  }
+
+  checkbox.disabled = false;
+}
+
+// "+ Restringir um material visível a todos" — ação separada e com aviso,
+// porque isso afeta todo mundo, não só o colaborador aberto no momento.
+btnColabRestringirNovo.addEventListener('click', () => {
+  const estavaEscondido = colabRestringirNovoPainel.hidden;
+  colabRestringirNovoPainel.hidden = !estavaEscondido;
+  if (estavaEscondido) montarPainelRestringirNovo();
+});
+
+function montarPainelRestringirNovo() {
+  colabRestringirNovoPainel.innerHTML = '';
+
+  const materiaisAbertos = [];
+  trilhasGlobais.forEach((trilha) => {
+    trilha.topicos.forEach((topico) => {
+      if ((topico.topico_atribuicoes ?? []).length === 0) {
+        materiaisAbertos.push({ trilhaTitulo: trilha.titulo, topico });
+      }
+    });
+  });
+
+  if (materiaisAbertos.length === 0) {
+    colabRestringirNovoPainel.innerHTML = '<p class="atribuicoes-colab-lista__vazio">Todos os materiais já estão restritos.</p>';
+    return;
+  }
+
+  const aviso = document.createElement('p');
+  aviso.className = 'anexo-aviso';
+  aviso.textContent = 'Atenção: restringir um material faz ele parar de aparecer pros outros colaboradores, a não ser que você marque cada um também (aqui no perfil de cada um).';
+
+  const select = document.createElement('select');
+  select.className = 'campo__select';
+  materiaisAbertos.forEach(({ trilhaTitulo, topico }) => {
+    const opt = document.createElement('option');
+    opt.value = topico.id;
+    opt.textContent = `${trilhaTitulo} — ${topico.titulo}`;
+    select.appendChild(opt);
+  });
+
+  const btnConfirmar = document.createElement('button');
+  btnConfirmar.type = 'button';
+  btnConfirmar.className = 'botao botao--primario';
+  btnConfirmar.textContent = `Restringir e liberar só para ${colaboradorAberto.nome}`;
+  btnConfirmar.addEventListener('click', async () => {
+    const topicoId = select.value;
+    const alvo = materiaisAbertos.find((m) => m.topico.id === topicoId);
+    if (!alvo) return;
+
+    btnConfirmar.disabled = true;
+    const { data, error } = await supabase
+      .from('topico_atribuicoes')
+      .insert({ topico_id: topicoId, colaborador_id: colaboradorAberto.id })
+      .select()
+      .single();
+    btnConfirmar.disabled = false;
+
+    if (error) { alert(error.message ?? 'Erro ao restringir material.'); return; }
+
+    alvo.topico.topico_atribuicoes = [...(alvo.topico.topico_atribuicoes ?? []), { id: data.id, colaborador_id: colaboradorAberto.id }];
+    colabRestringirNovoPainel.hidden = true;
+    renderizarAtribuicoesColaborador();
+  });
+
+  colabRestringirNovoPainel.append(aviso, select, btnConfirmar);
 }
 
 function fecharModalColaborador() {
@@ -833,7 +930,6 @@ function renderizarGerenciarTrilhas() {
             ${editandoTopico ? `
               <input class="gerenciar-topico__campo-titulo" data-campo="titulo" type="text" value="${escapeHtml(topico.titulo)}" />
               <div class="gerenciar-topico__anexos-edit" data-topico-anexos-edit></div>
-              <div class="gerenciar-topico__atribuicoes-edit" data-topico-atribuicoes-edit></div>
               <div class="gerenciar-topico__acoes">
                 <button type="button" class="botao--icone" data-acao="salvar-topico" title="Salvar">${iconeCheck()}</button>
                 <button type="button" class="botao--icone" data-acao="cancelar-topico" title="Cancelar">${iconeX()}</button>
@@ -841,7 +937,7 @@ function renderizarGerenciarTrilhas() {
             ` : `
               <span class="gerenciar-topico__titulo">${escapeHtml(topico.titulo)}</span>
               ${(topico.topico_atribuicoes ?? []).length > 0
-                ? `<span class="gerenciar-topico__badge-restrito" title="Visível só para colaboradores específicos">🔒 ${topico.topico_atribuicoes.length}</span>`
+                ? `<span class="gerenciar-topico__badge-restrito" title="Visível só para colaboradores específicos — gerencie quem vê no perfil de cada colaborador">🔒 ${topico.topico_atribuicoes.length}</span>`
                 : ''}
               ${anexos.length > 0
                 ? `<span class="gerenciar-topico__anexos-view">${anexos.map((anexo) =>
@@ -923,14 +1019,6 @@ function montarAnexosEdicao() {
 
   botoes.append(btnLink, btnArquivo);
   container.appendChild(botoes);
-
-  const containerAtribuicoes = gerenciarTrilhasEl.querySelector(
-    `.gerenciar-topico__linha[data-topico-id="${gerenciarTopicoEditando}"] [data-topico-atribuicoes-edit]`
-  );
-  if (containerAtribuicoes) {
-    const idsAtuais = (topicoAtual.topico_atribuicoes ?? []).map((a) => a.colaborador_id);
-    seletorAtribuicoesEdicao = montarSeletorColaboradores(containerAtribuicoes, idsAtuais);
-  }
 }
 
 function iconeCheck() {
@@ -981,7 +1069,6 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
   }
   if (acao === 'cancelar-topico') {
     gerenciarTopicoEditando = null;
-    seletorAtribuicoesEdicao = null;
     renderizarGerenciarTrilhas();
     return;
   }
@@ -1056,31 +1143,10 @@ gerenciarTrilhasEl.addEventListener('click', async (evento) => {
         if (erroInserir) erros.push(erroInserir.message ?? 'Erro ao salvar um dos anexos novos.');
       }
 
-      const idsAtribuicoesOriginais = (topicoAtual?.topico_atribuicoes ?? []).map((a) => a.colaborador_id);
-      const idsAtribuicoesFinais = seletorAtribuicoesEdicao ? seletorAtribuicoesEdicao.getMarcados() : idsAtribuicoesOriginais;
-      const idsParaRemoverAtrib = idsAtribuicoesOriginais.filter((id) => !idsAtribuicoesFinais.includes(id));
-      const idsParaAdicionarAtrib = idsAtribuicoesFinais.filter((id) => !idsAtribuicoesOriginais.includes(id));
-
-      if (idsParaRemoverAtrib.length > 0) {
-        const { error: erroRemoverAtrib } = await supabase
-          .from('topico_atribuicoes')
-          .delete()
-          .eq('topico_id', topicoId)
-          .in('colaborador_id', idsParaRemoverAtrib);
-        if (erroRemoverAtrib) erros.push(erroRemoverAtrib.message ?? 'Erro ao atualizar quem pode ver o material.');
-      }
-      if (idsParaAdicionarAtrib.length > 0) {
-        const { error: erroAdicionarAtrib } = await supabase
-          .from('topico_atribuicoes')
-          .insert(idsParaAdicionarAtrib.map((colaborador_id) => ({ topico_id: topicoId, colaborador_id })));
-        if (erroAdicionarAtrib) erros.push(erroAdicionarAtrib.message ?? 'Erro ao atualizar quem pode ver o material.');
-      }
-
       if (erros.length > 0) alert(erros.join(' '));
     }
 
     gerenciarTopicoEditando = null;
-    seletorAtribuicoesEdicao = null;
     await iniciarDashboard();
     painelAdmin.hidden = false;
     visaoColaborador.hidden = true;
@@ -1321,14 +1387,6 @@ formNovoTopico.addEventListener('submit', async (evento) => {
   if (inseridos.length > 0) {
     const { error: erroAnexos } = await supabase.from('topico_anexos').insert(inseridos);
     if (erroAnexos) erros.push(erroAnexos.message ?? 'Erro ao salvar um dos anexos.');
-  }
-
-  const idsAtribuidos = seletorAtribuicoesNovoMaterial ? seletorAtribuicoesNovoMaterial.getMarcados() : [];
-  if (idsAtribuidos.length > 0) {
-    const { error: erroAtribuicoes } = await supabase
-      .from('topico_atribuicoes')
-      .insert(idsAtribuidos.map((colaborador_id) => ({ topico_id: novoTopico.id, colaborador_id })));
-    if (erroAtribuicoes) erros.push(erroAtribuicoes.message ?? 'Erro ao salvar quem pode ver o material.');
   }
 
   btnNovoTopico.disabled = false;
