@@ -474,116 +474,88 @@ function abrirModalColaborador(colaborador) {
     adminProgressoCache.filter((p) => p.usuario_id === colaborador.id).map((p) => p.topico_id)
   );
 
-  colabChecklist.innerHTML = trilhasGlobais.map((trilha) => `
-    <p class="checklist-trilha__titulo">${escapeHtml(trilha.titulo)}</p>
-    ${trilha.topicos.map((topico) => {
-      const feito = concluidosDoColaborador.has(topico.id);
-      return `
-        <div class="checklist-item ${feito ? 'checklist-item--feito' : 'checklist-item--pendente'}">
-          <span class="checklist-item__marca">${feito ? '✓' : '○'}</span>
-          <span>${escapeHtml(topico.titulo)}</span>
-        </div>
-      `;
-    }).join('')}
-  `).join('');
+  // Progresso só faz sentido pras trilhas que ele realmente pode assistir —
+  // mostrar trilhas que ele nem enxerga na tela dele seria informação
+  // inútil (e confusa) aqui no perfil.
+  const trilhasLiberadas = trilhasGlobais
+    .map((trilha) => ({
+      ...trilha,
+      topicos: trilha.topicos.filter((topico) =>
+        (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaborador.id)
+      ),
+    }))
+    .filter((trilha) => trilha.topicos.length > 0);
+
+  colabChecklist.innerHTML = trilhasLiberadas.length === 0
+    ? '<p class="atribuicoes-colab-lista__vazio">Nenhuma trilha liberada ainda — marque abaixo o que ele(a) pode assistir.</p>'
+    : trilhasLiberadas.map((trilha) => `
+        <p class="checklist-trilha__titulo">${escapeHtml(trilha.titulo)}</p>
+        ${trilha.topicos.map((topico) => {
+          const feito = concluidosDoColaborador.has(topico.id);
+          return `
+            <div class="checklist-item ${feito ? 'checklist-item--feito' : 'checklist-item--pendente'}">
+              <span class="checklist-item__marca">${feito ? '✓' : '○'}</span>
+              <span>${escapeHtml(topico.titulo)}</span>
+            </div>
+          `;
+        }).join('')}
+      `).join('');
 
   renderizarAtribuicoesColaborador();
 
   modalColaborador.hidden = false;
 }
 
-// ---------- o que este colaborador pode assistir (lista de permissão completa) ----------
+// ---------- o que este colaborador pode assistir (lista de permissão por trilha) ----------
+// Granularidade é por trilha, não por material individual: ao marcar uma
+// trilha, o colaborador é atribuído a TODOS os materiais dela e precisa
+// assistir tudo; ao desmarcar, perde acesso à trilha inteira.
 function renderizarAtribuicoesColaborador() {
   if (!colaboradorAberto) return;
 
-  if (trilhasGlobais.every((t) => t.topicos.length === 0)) {
+  const trilhasComMaterial = trilhasGlobais.filter((t) => t.topicos.length > 0);
+
+  if (trilhasComMaterial.length === 0) {
     colabAtribuicoesLista.innerHTML = '<p class="atribuicoes-colab-lista__vazio">Nenhum material cadastrado ainda.</p>';
     return;
   }
 
   colabAtribuicoesLista.innerHTML = '';
 
-  trilhasGlobais.forEach((trilha) => {
-    if (trilha.topicos.length === 0) return;
-
-    const cabecalho = document.createElement('div');
-    cabecalho.className = 'checklist-trilha__cabecalho';
-
-    const titulo = document.createElement('p');
-    titulo.className = 'checklist-trilha__titulo';
-    titulo.textContent = trilha.titulo;
-
-    const btnTodaTrilha = document.createElement('button');
-    btnTodaTrilha.type = 'button';
-    btnTodaTrilha.className = 'link-acao';
-    const todosMarcadosNaTrilha = trilha.topicos.every((topico) =>
+  trilhasComMaterial.forEach((trilha) => {
+    const marcados = trilha.topicos.filter((topico) =>
       (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id)
-    );
-    btnTodaTrilha.textContent = todosMarcadosNaTrilha ? 'Desmarcar trilha' : 'Marcar trilha toda';
-    btnTodaTrilha.addEventListener('click', () => alternarTrilhaInteira(trilha, !todosMarcadosNaTrilha));
+    ).length;
+    const total = trilha.topicos.length;
+    const todosMarcados = marcados === total;
+    const parcial = marcados > 0 && !todosMarcados;
 
-    cabecalho.append(titulo, btnTodaTrilha);
-    colabAtribuicoesLista.appendChild(cabecalho);
+    const item = document.createElement('label');
+    item.className = 'atribuicao-colab-item atribuicao-colab-item--trilha';
 
-    trilha.topicos.forEach((topico) => {
-      const marcado = (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id);
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = todosMarcados;
+    checkbox.indeterminate = parcial;
+    // Parcial ou vazio -> marca a trilha inteira. Completo -> limpa tudo.
+    checkbox.addEventListener('change', () => alternarTrilhaInteira(trilha, !todosMarcados, checkbox));
 
-      const item = document.createElement('label');
-      item.className = 'atribuicao-colab-item';
+    const span = document.createElement('span');
+    span.textContent = trilha.titulo;
 
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = marcado;
-      checkbox.addEventListener('change', () => alternarAtribuicaoColaborador(topico, checkbox));
+    const contagem = document.createElement('span');
+    contagem.className = 'atribuicao-colab-item__contagem';
+    contagem.textContent = parcial ? `${marcados}/${total} — parcial` : `${total} material(is)`;
 
-      const span = document.createElement('span');
-      span.textContent = topico.titulo;
-
-      item.append(checkbox, span);
-      colabAtribuicoesLista.appendChild(item);
-    });
+    item.append(checkbox, span, contagem);
+    colabAtribuicoesLista.appendChild(item);
   });
 }
 
-// Marca/desmarca este colaborador num material — salva na hora, sem
-// precisar de botão "salvar" separado.
-async function alternarAtribuicaoColaborador(topico, checkbox) {
-  checkbox.disabled = true;
-
-  if (checkbox.checked) {
-    const { data, error } = await supabase
-      .from('topico_atribuicoes')
-      .insert({ topico_id: topico.id, colaborador_id: colaboradorAberto.id })
-      .select()
-      .single();
-    if (error) {
-      alert(error.message ?? 'Erro ao liberar material.');
-      checkbox.checked = false;
-    } else {
-      topico.topico_atribuicoes = [...(topico.topico_atribuicoes ?? []), { id: data.id, colaborador_id: colaboradorAberto.id }];
-    }
-  } else {
-    const { error } = await supabase
-      .from('topico_atribuicoes')
-      .delete()
-      .eq('topico_id', topico.id)
-      .eq('colaborador_id', colaboradorAberto.id);
-    if (error) {
-      alert(error.message ?? 'Erro ao remover acesso.');
-      checkbox.checked = true;
-    } else {
-      topico.topico_atribuicoes = (topico.topico_atribuicoes ?? []).filter((a) => a.colaborador_id !== colaboradorAberto.id);
-    }
-  }
-
-  checkbox.disabled = false;
-}
-
 // Marca ou desmarca de uma vez todos os materiais de uma trilha para o
-// colaborador aberto — evita clicar item por item quando ele deve ver
-// (ou não ver) uma trilha inteira.
-async function alternarTrilhaInteira(trilha, marcarTodos) {
-  colabAtribuicoesLista.querySelectorAll('input[type="checkbox"]').forEach((cb) => (cb.disabled = true));
+// colaborador aberto.
+async function alternarTrilhaInteira(trilha, marcarTodos, checkbox) {
+  if (checkbox) checkbox.disabled = true;
 
   for (const topico of trilha.topicos) {
     const jaTem = (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id);
