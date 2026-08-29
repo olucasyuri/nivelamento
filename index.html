@@ -119,6 +119,14 @@
         <p class="painel-geral__resumo">Carregando…</p>
       </div>
 
+      <div class="modal-colaborador__atribuicoes">
+        <p class="modal-colaborador__subtitulo">Materiais restritos</p>
+        <p class="campo__ajuda">Marque quais materiais restritos esse colaborador pode ver. Materiais sem restrição já aparecem pra ele automaticamente.</p>
+        <div id="colab-atribuicoes-lista" class="atribuicoes-colab-lista"></div>
+        <button type="button" id="btn-colab-restringir-novo" class="botao botao--fantasma">+ Restringir um material visível a todos</button>
+        <div id="colab-restringir-novo-painel" class="restringir-novo-painel" hidden></div>
+      </div>
+
       <div class="modal__acoes">
         <button type="button" id="btn-fechar-colaborador" class="botao botao--fantasma">Fechar</button>
       </div>
@@ -250,11 +258,6 @@
             <button type="button" id="btn-add-anexo-link" class="botao botao--fantasma">+ Adicionar link</button>
             <button type="button" id="btn-add-anexo-arquivo" class="botao botao--fantasma">+ Anexar arquivo</button>
           </div>
-        </div>
-        <div class="campo">
-          <span class="campo__rotulo">Quem pode ver este material</span>
-          <p class="campo__ajuda">Deixe todos desmarcados para o material ficar visível a todos os colaboradores.</p>
-          <div id="topico-atribuicoes-container"></div>
         </div>
         <button type="submit" id="btn-novo-topico" class="botao botao--primario">
           <span>Adicionar material</span>
