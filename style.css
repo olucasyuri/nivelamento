@@ -153,6 +153,46 @@ input { font-family: inherit; }
 }
 .botao--fantasma:hover { color: var(--texto); border-color: var(--texto-mudo); }
 
+.anexos-lista { display: flex; flex-direction: column; gap: 8px; }
+.anexos-lista__botoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.anexo-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--asfalto);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.anexo-linha input[type="text"] {
+  background: var(--painel-alt);
+  border: 1px solid var(--borda);
+  border-radius: 5px;
+  padding: 8px 10px;
+  color: var(--texto);
+  font-size: 13px;
+  outline: none;
+}
+.anexo-linha input[type="text"].anexo-titulo { flex: 1; min-width: 100px; }
+.anexo-linha input[type="text"].anexo-url { flex: 2; min-width: 140px; }
+.anexo-linha input[type="file"] { flex: 1; min-width: 140px; font-size: 12px; color: var(--texto-mudo); }
+.anexo-linha--existente { justify-content: space-between; }
+.anexo-linha__label { font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anexo-linha__label a { color: var(--laranja); margin-left: 6px; }
+.anexo-aviso {
+  font-size: 12px;
+  color: var(--laranja);
+  background: rgba(229, 72, 43, 0.1);
+  border: 1px solid rgba(229, 72, 43, 0.35);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.gerenciar-topico__anexos-view { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 120px; }
+.gerenciar-topico__anexos-view .gerenciar-topico__link { display: inline-flex; }
+.gerenciar-topico__anexos-edit { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 6px; }
+.gerenciar-topico__anexos-edit .anexos-lista__botoes { margin-top: 2px; }
+
 .login-erro {
   margin: 0;
   font-size: 13px;
@@ -734,6 +774,7 @@ input { font-family: inherit; }
 }
 .topico__link:hover { text-decoration: underline; }
 .topico__sem-link { font-size: 12px; color: var(--texto-mudo); }
+.topico__links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; }
 
 /* ---------------- ATALHO "CONTINUAR" ---------------- */
 .botao--continuar { margin-top: 14px; align-self: flex-start; }
