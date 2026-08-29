@@ -50,6 +50,7 @@ const trilhaFeedback = document.getElementById('trilha-feedback');
 const formNovoTopico = document.getElementById('form-novo-topico');
 const topicoTrilhaSelect = document.getElementById('topico-trilha');
 const topicoTitulo = document.getElementById('topico-titulo');
+const topicoLiberarTodos = document.getElementById('topico-liberar-todos');
 const topicoAnexosLista = document.getElementById('topico-anexos-lista');
 const btnAddAnexoLink = document.getElementById('btn-add-anexo-link');
 const btnAddAnexoArquivo = document.getElementById('btn-add-anexo-arquivo');
@@ -79,8 +80,6 @@ const colabUsuario = document.getElementById('colab-usuario');
 const colabBadges = document.getElementById('colab-badges');
 const colabChecklist = document.getElementById('colab-checklist');
 const colabAtribuicoesLista = document.getElementById('colab-atribuicoes-lista');
-const btnColabRestringirNovo = document.getElementById('btn-colab-restringir-novo');
-const colabRestringirNovoPainel = document.getElementById('colab-restringir-novo-painel');
 const btnColabResetarSenha = document.getElementById('btn-colab-resetar-senha');
 const btnColabAlternarAcesso = document.getElementById('btn-colab-alternar-acesso');
 const btnColabAlternarAdmin = document.getElementById('btn-colab-alternar-admin');
@@ -274,15 +273,15 @@ async function iniciarDashboard() {
   trilhasGlobais = trilhas;
   preencherSelectDeTrilhas(trilhas);
 
-  // Um tópico só aparece pra todo mundo se NÃO tiver nenhuma atribuição
-  // (topico_atribuicoes vazio). Se tiver atribuição, só quem está na lista
-  // de atribuídos enxerga — os demais nem veem que ele existe.
+  // Modelo de lista de permissão: um tópico só aparece se o colaborador
+  // estiver explicitamente marcado em topico_atribuicoes. Sem marcação
+  // nenhuma = ninguém vê (nem precisa ter "atribuição vazia" como sinal
+  // de "aberto pra todos" — isso não existe mais).
   trilhasVisiveis = trilhas.map((t) => ({
     ...t,
-    topicos: t.topicos.filter((topico) => {
-      const atribuicoes = topico.topico_atribuicoes ?? [];
-      return atribuicoes.length === 0 || atribuicoes.some((a) => a.colaborador_id === userId);
-    }),
+    topicos: t.topicos.filter((topico) =>
+      (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === userId)
+    ),
   }));
 
   renderizarTrilhas(trilhasVisiveis);
@@ -488,62 +487,66 @@ function abrirModalColaborador(colaborador) {
     }).join('')}
   `).join('');
 
-  colabRestringirNovoPainel.hidden = true;
-  colabRestringirNovoPainel.innerHTML = '';
   renderizarAtribuicoesColaborador();
 
   modalColaborador.hidden = false;
 }
 
-// ---------- materiais restritos, geridos direto no perfil do colaborador ----------
+// ---------- o que este colaborador pode assistir (lista de permissão completa) ----------
 function renderizarAtribuicoesColaborador() {
   if (!colaboradorAberto) return;
 
-  const materiaisRestritos = [];
-  trilhasGlobais.forEach((trilha) => {
-    trilha.topicos.forEach((topico) => {
-      if ((topico.topico_atribuicoes ?? []).length > 0) {
-        materiaisRestritos.push({ trilhaTitulo: trilha.titulo, topico });
-      }
-    });
-  });
-
-  if (materiaisRestritos.length === 0) {
-    colabAtribuicoesLista.innerHTML = '<p class="atribuicoes-colab-lista__vazio">Nenhum material restrito cadastrado ainda.</p>';
+  if (trilhasGlobais.every((t) => t.topicos.length === 0)) {
+    colabAtribuicoesLista.innerHTML = '<p class="atribuicoes-colab-lista__vazio">Nenhum material cadastrado ainda.</p>';
     return;
   }
 
   colabAtribuicoesLista.innerHTML = '';
-  let trilhaAtual = null;
-  materiaisRestritos.forEach(({ trilhaTitulo, topico }) => {
-    if (trilhaTitulo !== trilhaAtual) {
-      trilhaAtual = trilhaTitulo;
-      const titulo = document.createElement('p');
-      titulo.className = 'checklist-trilha__titulo';
-      titulo.textContent = trilhaTitulo;
-      colabAtribuicoesLista.appendChild(titulo);
-    }
 
-    const marcado = (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id);
+  trilhasGlobais.forEach((trilha) => {
+    if (trilha.topicos.length === 0) return;
 
-    const item = document.createElement('label');
-    item.className = 'atribuicao-colab-item';
+    const cabecalho = document.createElement('div');
+    cabecalho.className = 'checklist-trilha__cabecalho';
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = marcado;
-    checkbox.addEventListener('change', () => alternarAtribuicaoColaborador(topico, checkbox));
+    const titulo = document.createElement('p');
+    titulo.className = 'checklist-trilha__titulo';
+    titulo.textContent = trilha.titulo;
 
-    const span = document.createElement('span');
-    span.textContent = topico.titulo;
+    const btnTodaTrilha = document.createElement('button');
+    btnTodaTrilha.type = 'button';
+    btnTodaTrilha.className = 'link-acao';
+    const todosMarcadosNaTrilha = trilha.topicos.every((topico) =>
+      (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id)
+    );
+    btnTodaTrilha.textContent = todosMarcadosNaTrilha ? 'Desmarcar trilha' : 'Marcar trilha toda';
+    btnTodaTrilha.addEventListener('click', () => alternarTrilhaInteira(trilha, !todosMarcadosNaTrilha));
 
-    item.append(checkbox, span);
-    colabAtribuicoesLista.appendChild(item);
+    cabecalho.append(titulo, btnTodaTrilha);
+    colabAtribuicoesLista.appendChild(cabecalho);
+
+    trilha.topicos.forEach((topico) => {
+      const marcado = (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id);
+
+      const item = document.createElement('label');
+      item.className = 'atribuicao-colab-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = marcado;
+      checkbox.addEventListener('change', () => alternarAtribuicaoColaborador(topico, checkbox));
+
+      const span = document.createElement('span');
+      span.textContent = topico.titulo;
+
+      item.append(checkbox, span);
+      colabAtribuicoesLista.appendChild(item);
+    });
   });
 }
 
-// Marca/desmarca este colaborador num material restrito — salva na hora,
-// sem precisar de botão "salvar" separado.
+// Marca/desmarca este colaborador num material — salva na hora, sem
+// precisar de botão "salvar" separado.
 async function alternarAtribuicaoColaborador(topico, checkbox) {
   checkbox.disabled = true;
 
@@ -554,7 +557,7 @@ async function alternarAtribuicaoColaborador(topico, checkbox) {
       .select()
       .single();
     if (error) {
-      alert(error.message ?? 'Erro ao atribuir material.');
+      alert(error.message ?? 'Erro ao liberar material.');
       checkbox.checked = false;
     } else {
       topico.topico_atribuicoes = [...(topico.topico_atribuicoes ?? []), { id: data.id, colaborador_id: colaboradorAberto.id }];
@@ -566,7 +569,7 @@ async function alternarAtribuicaoColaborador(topico, checkbox) {
       .eq('topico_id', topico.id)
       .eq('colaborador_id', colaboradorAberto.id);
     if (error) {
-      alert(error.message ?? 'Erro ao remover atribuição.');
+      alert(error.message ?? 'Erro ao remover acesso.');
       checkbox.checked = true;
     } else {
       topico.topico_atribuicoes = (topico.topico_atribuicoes ?? []).filter((a) => a.colaborador_id !== colaboradorAberto.id);
@@ -576,69 +579,32 @@ async function alternarAtribuicaoColaborador(topico, checkbox) {
   checkbox.disabled = false;
 }
 
-// "+ Restringir um material visível a todos" — ação separada e com aviso,
-// porque isso afeta todo mundo, não só o colaborador aberto no momento.
-btnColabRestringirNovo.addEventListener('click', () => {
-  const estavaEscondido = colabRestringirNovoPainel.hidden;
-  colabRestringirNovoPainel.hidden = !estavaEscondido;
-  if (estavaEscondido) montarPainelRestringirNovo();
-});
+// Marca ou desmarca de uma vez todos os materiais de uma trilha para o
+// colaborador aberto — evita clicar item por item quando ele deve ver
+// (ou não ver) uma trilha inteira.
+async function alternarTrilhaInteira(trilha, marcarTodos) {
+  colabAtribuicoesLista.querySelectorAll('input[type="checkbox"]').forEach((cb) => (cb.disabled = true));
 
-function montarPainelRestringirNovo() {
-  colabRestringirNovoPainel.innerHTML = '';
-
-  const materiaisAbertos = [];
-  trilhasGlobais.forEach((trilha) => {
-    trilha.topicos.forEach((topico) => {
-      if ((topico.topico_atribuicoes ?? []).length === 0) {
-        materiaisAbertos.push({ trilhaTitulo: trilha.titulo, topico });
-      }
-    });
-  });
-
-  if (materiaisAbertos.length === 0) {
-    colabRestringirNovoPainel.innerHTML = '<p class="atribuicoes-colab-lista__vazio">Todos os materiais já estão restritos.</p>';
-    return;
+  for (const topico of trilha.topicos) {
+    const jaTem = (topico.topico_atribuicoes ?? []).some((a) => a.colaborador_id === colaboradorAberto.id);
+    if (marcarTodos && !jaTem) {
+      const { data, error } = await supabase
+        .from('topico_atribuicoes')
+        .insert({ topico_id: topico.id, colaborador_id: colaboradorAberto.id })
+        .select()
+        .single();
+      if (!error) topico.topico_atribuicoes = [...(topico.topico_atribuicoes ?? []), { id: data.id, colaborador_id: colaboradorAberto.id }];
+    } else if (!marcarTodos && jaTem) {
+      const { error } = await supabase
+        .from('topico_atribuicoes')
+        .delete()
+        .eq('topico_id', topico.id)
+        .eq('colaborador_id', colaboradorAberto.id);
+      if (!error) topico.topico_atribuicoes = (topico.topico_atribuicoes ?? []).filter((a) => a.colaborador_id !== colaboradorAberto.id);
+    }
   }
 
-  const aviso = document.createElement('p');
-  aviso.className = 'anexo-aviso';
-  aviso.textContent = 'Atenção: restringir um material faz ele parar de aparecer pros outros colaboradores, a não ser que você marque cada um também (aqui no perfil de cada um).';
-
-  const select = document.createElement('select');
-  select.className = 'campo__select';
-  materiaisAbertos.forEach(({ trilhaTitulo, topico }) => {
-    const opt = document.createElement('option');
-    opt.value = topico.id;
-    opt.textContent = `${trilhaTitulo} — ${topico.titulo}`;
-    select.appendChild(opt);
-  });
-
-  const btnConfirmar = document.createElement('button');
-  btnConfirmar.type = 'button';
-  btnConfirmar.className = 'botao botao--primario';
-  btnConfirmar.textContent = `Restringir e liberar só para ${colaboradorAberto.nome}`;
-  btnConfirmar.addEventListener('click', async () => {
-    const topicoId = select.value;
-    const alvo = materiaisAbertos.find((m) => m.topico.id === topicoId);
-    if (!alvo) return;
-
-    btnConfirmar.disabled = true;
-    const { data, error } = await supabase
-      .from('topico_atribuicoes')
-      .insert({ topico_id: topicoId, colaborador_id: colaboradorAberto.id })
-      .select()
-      .single();
-    btnConfirmar.disabled = false;
-
-    if (error) { alert(error.message ?? 'Erro ao restringir material.'); return; }
-
-    alvo.topico.topico_atribuicoes = [...(alvo.topico.topico_atribuicoes ?? []), { id: data.id, colaborador_id: colaboradorAberto.id }];
-    colabRestringirNovoPainel.hidden = true;
-    renderizarAtribuicoesColaborador();
-  });
-
-  colabRestringirNovoPainel.append(aviso, select, btnConfirmar);
+  renderizarAtribuicoesColaborador();
 }
 
 function fecharModalColaborador() {
@@ -948,9 +914,17 @@ function renderizarGerenciarTrilhas() {
               </div>
             ` : `
               <span class="gerenciar-topico__titulo">${escapeHtml(topico.titulo)}</span>
-              ${(topico.topico_atribuicoes ?? []).length > 0
-                ? `<span class="gerenciar-topico__badge-restrito" title="Visível só para colaboradores específicos — gerencie quem vê no perfil de cada colaborador">🔒 ${topico.topico_atribuicoes.length}</span>`
-                : ''}
+              ${(() => {
+                const qtd = (topico.topico_atribuicoes ?? []).length;
+                const totalColab = adminPerfisCache.length;
+                if (qtd === 0) {
+                  return `<span class="gerenciar-topico__badge-invisivel" title="Ninguém foi marcado pra ver este material — ele está invisível pra todo mundo. Marque quem pode ver no perfil de cada colaborador.">⚠ ninguém vê</span>`;
+                }
+                if (totalColab > 0 && qtd >= totalColab) {
+                  return `<span class="gerenciar-topico__badge-todos" title="Todos os colaboradores cadastrados podem ver este material">✓ todos veem</span>`;
+                }
+                return `<span class="gerenciar-topico__badge-restrito" title="Visível só para colaboradores específicos — gerencie quem vê no perfil de cada colaborador">🔒 ${qtd}</span>`;
+              })()}
               ${anexos.length > 0
                 ? `<span class="gerenciar-topico__anexos-view">${anexos.map((anexo) =>
                     `<a class="gerenciar-topico__link" href="${escapeHtml(anexo.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(anexo.titulo || 'Abrir material')}">${iconeAbrir}</a>`
@@ -1399,6 +1373,15 @@ formNovoTopico.addEventListener('submit', async (evento) => {
   if (inseridos.length > 0) {
     const { error: erroAnexos } = await supabase.from('topico_anexos').insert(inseridos);
     if (erroAnexos) erros.push(erroAnexos.message ?? 'Erro ao salvar um dos anexos.');
+  }
+
+  // Sem isso, o material nasce sem ninguém marcado e fica invisível pra
+  // todo mundo (modelo é lista de permissão). Se o checkbox estiver
+  // marcado, já libera pra todos os colaboradores atuais.
+  if (topicoLiberarTodos.checked && adminPerfisCache.length > 0) {
+    const linhas = adminPerfisCache.map((p) => ({ topico_id: novoTopico.id, colaborador_id: p.id }));
+    const { error: erroAtribuicoes } = await supabase.from('topico_atribuicoes').insert(linhas);
+    if (erroAtribuicoes) erros.push(erroAtribuicoes.message ?? 'Erro ao liberar o material para todos.');
   }
 
   btnNovoTopico.disabled = false;
