@@ -391,6 +391,29 @@ input { font-family: inherit; }
 .checklist-item--pendente .checklist-item__marca { color: var(--texto-mudo); }
 .checklist-item--pendente { color: var(--texto-mudo); }
 
+.modal-colaborador__atribuicoes { margin-bottom: 16px; }
+.modal-colaborador__subtitulo { font-size: 13.5px; font-weight: 600; margin: 0 0 2px; }
+.atribuicoes-colab-lista {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 8px 0;
+}
+.atribuicoes-colab-lista__vazio { font-size: 12px; color: var(--texto-mudo); padding: 6px 2px; margin: 0; }
+.atribuicao-colab-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+.atribuicao-colab-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--laranja); background: none; border: none; padding: 0; flex-shrink: 0; }
+.restringir-novo-painel {
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ---------------- KPIs ---------------- */
 .kpis {
   display: grid;
